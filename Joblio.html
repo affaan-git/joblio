@@ -213,6 +213,13 @@
       transition: background 0.14s ease;
     }
 
+    .list-empty {
+      padding: 1rem 0.9rem;
+      color: var(--text-muted);
+      font-size: 0.82rem;
+      border-bottom: 1px solid var(--border);
+    }
+
     .card:hover { background: var(--bg-hover); }
     .card.active { background: var(--primary-soft); box-shadow: inset 3px 0 0 var(--primary); }
 
@@ -803,6 +810,7 @@
     .toast.success { border-color: var(--success); }
     .toast.warn { border-color: var(--warn); }
     .toast.error { border-color: var(--danger); }
+    .toast.saved { border-color: var(--border); color: var(--text-muted); }
 
     @keyframes menu-in {
       from { opacity: 0; transform: translateY(-4px); }
@@ -858,7 +866,7 @@
 
     <div class="center-controls">
       <div class="search-wrap">
-        <input id="searchInput" class="search" placeholder="Search company, title, location, notes" />
+        <input id="searchInput" class="search" placeholder="Search company, title, location, notes" title="Press / to focus search" />
       </div>
       <select id="sortSelect"></select>
       <div class="action-menu-wrap">
@@ -889,7 +897,7 @@
       </div>
       <input id="importInput" type="file" accept="application/json" style="display:none;" />
       <button id="themeToggle" class="btn" title="Toggle theme" aria-label="Toggle theme">☀</button>
-      <button id="newBtn" class="btn primary">+ New</button>
+      <button id="newBtn" class="btn primary" title="Create new application (N)">+ New</button>
     </div>
   </header>
 
@@ -1041,6 +1049,8 @@
     const LEFT_PANEL_DEFAULT = 372;
     const LEFT_PANEL_MIN = 300;
     const LEFT_PANEL_MAX = 620;
+    let saveToastTimer = null;
+    let lastSavedToastAt = 0;
 
     function uid() {
       return `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -1099,6 +1109,16 @@
       setTimeout(() => {
         toast.remove();
       }, 3000);
+    }
+
+    function scheduleSavedToast() {
+      if (saveToastTimer) clearTimeout(saveToastTimer);
+      saveToastTimer = setTimeout(() => {
+        const now = Date.now();
+        if (now - lastSavedToastAt < 2000) return;
+        showToast("Saved.", "saved");
+        lastSavedToastAt = now;
+      }, 700);
     }
 
     function createApp({ company, title, location = "", workMode = "Unknown" }) {
@@ -1242,6 +1262,11 @@
         state.activeId = apps[0]?.id || null;
       }
 
+      if (!apps.length) {
+        listEl.innerHTML = `<div class="list-empty">No applications yet. Click + New to add one.</div>`;
+        return;
+      }
+
       listEl.innerHTML = apps
         .map((app) => {
           const active = app.id === state.activeId ? " active" : "";
@@ -1308,6 +1333,7 @@
       app.updatedAt = nowIso();
       persist();
       renderList();
+      scheduleSavedToast();
     }
 
     function setStatus(app, nextStatus, options = {}) {
@@ -1407,7 +1433,7 @@
     function renderDetail() {
       const app = state.apps.find((a) => a.id === state.activeId);
       if (!app) {
-        detailEl.innerHTML = `<div class=\"detail-empty\">Create or select an application to start tracking.</div>`;
+        detailEl.innerHTML = `<div class=\"detail-empty\">No application selected. Click + New to start tracking.</div>`;
         return;
       }
       ensureAppWorkspace(app);
@@ -1526,6 +1552,7 @@
         app.updatedAt = nowIso();
         persist();
         renderList();
+        scheduleSavedToast();
       });
       followUpInput.addEventListener("change", (e) => updateField(app, "nextFollowUpAt", e.target.value));
 
@@ -1563,10 +1590,14 @@
             e.stopPropagation();
             const idx = Number(btn.dataset.fileIndex);
             if (!Number.isInteger(idx) || idx < 0 || idx >= app.workspaceFiles.length) return;
+            const fileName = app.workspaceFiles[idx]?.name || "this file";
+            const confirmed = window.confirm(`Remove "${fileName}" from workspace files?`);
+            if (!confirmed) return;
             app.workspaceFiles.splice(idx, 1);
             app.updatedAt = nowIso();
             persist();
             renderWorkspaceFiles();
+            scheduleSavedToast();
           });
         });
       }
@@ -1582,6 +1613,7 @@
         app.updatedAt = nowIso();
         persist();
         renderWorkspaceFiles();
+        scheduleSavedToast();
       }
 
       renderWorkspaceFiles();
@@ -1621,6 +1653,7 @@
         app.descriptionText = descriptionInput.value;
         app.updatedAt = nowIso();
         persist();
+        scheduleSavedToast();
       });
 
       document.getElementById("deleteAppBtn").addEventListener("click", () => {
@@ -1897,6 +1930,12 @@
       filtersMenu.classList.remove("open");
     }
 
+    function isTextEntryTarget(target) {
+      if (!target) return false;
+      const tag = target.tagName;
+      return target.isContentEditable || tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+    }
+
     document.addEventListener("pointerdown", (e) => {
       const inData = e.target.closest("#dataBtn, #dataMenu");
       const inFilters = e.target.closest("#filtersBtn, #filtersMenu");
@@ -1912,11 +1951,25 @@
     });
 
     document.addEventListener("keydown", (e) => {
-      if (e.key !== "Escape") return;
-      dataMenu.classList.remove("open");
-      filtersMenu.classList.remove("open");
-      closeStatusDialog();
-      closeNewDialog();
+      if (!e.metaKey && !e.ctrlKey && !e.altKey && e.key === "/" && !isTextEntryTarget(e.target)) {
+        e.preventDefault();
+        searchInput.focus();
+        searchInput.select();
+        return;
+      }
+
+      if (!e.metaKey && !e.ctrlKey && !e.altKey && (e.key === "n" || e.key === "N") && !isTextEntryTarget(e.target)) {
+        e.preventDefault();
+        openNewDialog();
+        return;
+      }
+
+      if (e.key === "Escape") {
+        dataMenu.classList.remove("open");
+        filtersMenu.classList.remove("open");
+        closeStatusDialog();
+        closeNewDialog();
+      }
     });
 
     hydrate();
