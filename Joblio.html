@@ -824,38 +824,28 @@
   <div class="dialog-wrap" id="newDialog">
     <div class="dialog">
       <div class="section-title">Create Application</div>
-      <div class="insights-tabs">
-        <button id="newTabPost" class="insights-tab active" type="button">From Job Post</button>
-        <button id="newTabManual" class="insights-tab" type="button">Manual</button>
-      </div>
-
-      <div id="newPanelPost" class="create-panel active">
-        <p class="muted-help">Paste job description text to create quickly. Company and role can be inferred.</p>
+      <p class="muted-help">Enter role/company directly and optionally paste the job description to save it with the application.</p>
+      <div class="grid-2">
         <div class="field">
-          <label class="label" for="newPostText">Job description text</label>
-          <textarea id="newPostText" placeholder="Paste the job posting text here..."></textarea>
+          <label class="label" for="newTitle">Role title</label>
+          <input id="newTitle" type="text" />
+        </div>
+        <div class="field">
+          <label class="label" for="newCompany">Company</label>
+          <input id="newCompany" type="text" />
+        </div>
+        <div class="field">
+          <label class="label" for="newLocation">Location</label>
+          <input id="newLocation" type="text" placeholder="Austin, TX / Remote" />
+        </div>
+        <div class="field">
+          <label class="label" for="newMode">Work mode</label>
+          <select id="newMode"></select>
         </div>
       </div>
-
-      <div id="newPanelManual" class="create-panel">
-        <div class="grid-2">
-          <div class="field">
-            <label class="label" for="newTitle">Role title</label>
-            <input id="newTitle" type="text" />
-          </div>
-          <div class="field">
-            <label class="label" for="newCompany">Company</label>
-            <input id="newCompany" type="text" />
-          </div>
-          <div class="field">
-            <label class="label" for="newLocation">Location</label>
-            <input id="newLocation" type="text" placeholder="Austin, TX / Remote" />
-          </div>
-          <div class="field">
-            <label class="label" for="newMode">Work mode</label>
-            <select id="newMode"></select>
-          </div>
-        </div>
+      <div class="field">
+        <label class="label" for="newPostText">Job description (optional)</label>
+        <textarea id="newPostText" placeholder="Paste the job posting text here..."></textarea>
       </div>
       <div style="display:flex; justify-content:flex-end; gap:0.45rem;">
         <button id="newCancel" class="btn">Cancel</button>
@@ -910,7 +900,6 @@
       apps: [],
       activeId: null,
       pendingIntakeFocusId: null,
-      newDialogMode: "post",
       search: "",
       sortBy: "recent_update",
       statusFilter: "all",
@@ -944,10 +933,6 @@
     const newDialog = document.getElementById("newDialog");
     const newCancel = document.getElementById("newCancel");
     const newCreate = document.getElementById("newCreate");
-    const newTabPost = document.getElementById("newTabPost");
-    const newTabManual = document.getElementById("newTabManual");
-    const newPanelPost = document.getElementById("newPanelPost");
-    const newPanelManual = document.getElementById("newPanelManual");
     const newPostText = document.getElementById("newPostText");
     const newCompany = document.getElementById("newCompany");
     const newTitle = document.getElementById("newTitle");
@@ -1515,25 +1500,14 @@
       renderDetail();
     }
 
-    function setNewDialogMode(mode) {
-      state.newDialogMode = mode === "manual" ? "manual" : "post";
-      const manual = state.newDialogMode === "manual";
-      newTabManual.classList.toggle("active", manual);
-      newTabPost.classList.toggle("active", !manual);
-      newPanelManual.classList.toggle("active", manual);
-      newPanelPost.classList.toggle("active", !manual);
-      newCreate.textContent = manual ? "Create" : "Create from description";
-    }
-
     function openNewDialog() {
       newCompany.value = "";
       newTitle.value = "";
       newLocation.value = "";
       newMode.value = "Unknown";
       newPostText.value = "";
-      setNewDialogMode("post");
       newDialog.classList.add("open");
-      newPostText.focus();
+      newTitle.focus();
     }
 
     function closeNewDialog() {
@@ -1541,40 +1515,19 @@
     }
 
     async function createFromDialog() {
-      if (state.newDialogMode === "manual") {
-        const company = newCompany.value.trim();
-        const title = newTitle.value.trim();
-        if (!company || !title) {
-          showToast("Company and role title are required.", "warn");
-          return;
-        }
-        const app = createApp({
-          company,
-          title,
-          location: newLocation.value.trim(),
-          workMode: newMode.value,
-        });
-        state.apps.unshift(app);
-        state.activeId = app.id;
-        state.pendingIntakeFocusId = app.id;
-        persist();
-        closeNewDialog();
-        render();
-        showToast("Application created.", "success");
-        return;
-      }
-
-      let sourceText = newPostText.value.trim();
-      if (!sourceText) {
-        showToast("Paste a job description.", "warn");
+      const company = newCompany.value.trim();
+      const title = newTitle.value.trim();
+      const sourceText = newPostText.value.trim();
+      if (!company || !title) {
+        showToast("Company and role title are required.", "warn");
         return;
       }
 
       const app = createApp({
-        company: "Unknown company",
-        title: "New role",
-        location: "",
-        workMode: "Unknown",
+        company,
+        title,
+        location: newLocation.value.trim(),
+        workMode: newMode.value,
       });
       app.intakeText = sourceText;
 
@@ -1584,7 +1537,7 @@
       persist();
       closeNewDialog();
       render();
-      showToast("Application created from description.", "success");
+      showToast("Application created.", "success");
     }
 
     function exportTrackerData() {
@@ -1744,8 +1697,6 @@
     newBtn.addEventListener("click", openNewDialog);
     newCancel.addEventListener("click", closeNewDialog);
     newCreate.addEventListener("click", createFromDialog);
-    newTabPost.addEventListener("click", () => setNewDialogMode("post"));
-    newTabManual.addEventListener("click", () => setNewDialogMode("manual"));
 
     newDialog.addEventListener("click", (e) => {
       if (e.target === newDialog) closeNewDialog();
