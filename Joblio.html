@@ -171,6 +171,10 @@
       min-height: 22px;
     }
 
+    .search-wrap:not(.has-tokens) .search-parsed {
+      display: none;
+    }
+
     .search-token-chip {
       border: 1px solid var(--border);
       background: var(--bg-panel);
@@ -935,8 +939,7 @@
         <input id="searchInput" class="search" placeholder="Search company, title, location, notes [ / ]" title="Press / to focus search" />
         <div id="searchPopover" class="search-popover" role="dialog" aria-label="Search tokens and presets">
           <div class="search-popover-head">
-            <span>Token search: <code>company:</code> <code>title:</code> <code>location:</code> <code>status:</code> <code>mode:</code> <code>notes:</code></span>
-            <span>Esc to close</span>
+            <span>Use tokens like <code>company:</code> <code>title:</code> <code>location:</code> <code>status:</code> <code>mode:</code> <code>notes:</code></span>
           </div>
           <div id="searchTokenPresets" class="search-token-presets"></div>
           <div id="searchParsed" class="search-parsed"></div>
@@ -1343,7 +1346,9 @@
         values.forEach((value) => chips.push(`<span class="search-token-chip">${escapeHtml(field)}:${escapeHtml(value)}</span>`));
       });
       parsed.terms.forEach((term) => chips.push(`<span class="search-token-chip">text:${escapeHtml(term)}</span>`));
-      searchParsed.innerHTML = chips.length ? chips.join("") : `<span class="small">Type text or token filters. Example: <code>company:Q2 status:applied backend</code></span>`;
+      const hasTokenChips = Object.values(parsed.tokens).some((arr) => arr.length > 0);
+      searchWrap.classList.toggle("has-tokens", hasTokenChips);
+      searchParsed.innerHTML = chips.length ? chips.join("") : "";
 
       searchTokenPresets.querySelectorAll("[data-token]").forEach((btn) => {
         btn.addEventListener("mousedown", (e) => {
@@ -1990,8 +1995,11 @@
 
     searchInput.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
-        closeSearchPopover();
-        searchInput.blur();
+        if (searchWrap.classList.contains("open")) {
+          e.preventDefault();
+          e.stopPropagation();
+          closeSearchPopover();
+        }
       }
     });
 
@@ -2155,6 +2163,7 @@
       }
 
       if (e.key === "Escape") {
+        if (document.activeElement === searchInput) return;
         dataMenu.classList.remove("open");
         filtersMenu.classList.remove("open");
         closeSearchPopover();
