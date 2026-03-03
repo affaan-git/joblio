@@ -115,6 +115,72 @@
       box-shadow: 0 0 0 2px var(--primary-soft);
     }
 
+    .search-popover {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      width: min(560px, 96vw);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--bg-elevated);
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+      padding: 0.55rem;
+      display: none;
+      gap: 0.5rem;
+      z-index: 22;
+    }
+
+    .search-wrap.open .search-popover {
+      display: grid;
+    }
+
+    .search-popover-head {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .search-token-presets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+    }
+
+    .search-token-btn {
+      border: 1px solid var(--border);
+      background: var(--bg-panel);
+      color: var(--text-muted);
+      border-radius: 999px;
+      padding: 0.22rem 0.52rem;
+      font-size: 0.73rem;
+      cursor: pointer;
+    }
+
+    .search-token-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text);
+    }
+
+    .search-parsed {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.32rem;
+      min-height: 22px;
+    }
+
+    .search-token-chip {
+      border: 1px solid var(--border);
+      background: var(--bg-panel);
+      color: var(--text-muted);
+      border-radius: 999px;
+      padding: 0.16rem 0.5rem;
+      font-size: 0.71rem;
+      line-height: 1.2;
+    }
+
     .top-actions {
       display: flex;
       gap: 0.4rem;
@@ -866,7 +932,15 @@
 
     <div class="center-controls">
       <div class="search-wrap">
-        <input id="searchInput" class="search" placeholder="Search company, title, location, notes" title="Press / to focus search" />
+        <input id="searchInput" class="search" placeholder="Search company, title, location, notes [ / ]" title="Press / to focus search" />
+        <div id="searchPopover" class="search-popover" role="dialog" aria-label="Search tokens and presets">
+          <div class="search-popover-head">
+            <span>Token search: <code>company:</code> <code>title:</code> <code>location:</code> <code>status:</code> <code>mode:</code> <code>notes:</code></span>
+            <span>Esc to close</span>
+          </div>
+          <div id="searchTokenPresets" class="search-token-presets"></div>
+          <div id="searchParsed" class="search-parsed"></div>
+        </div>
       </div>
       <select id="sortSelect"></select>
       <div class="action-menu-wrap">
@@ -1013,7 +1087,11 @@
     const detailEl = document.getElementById("detail");
     const countLabel = document.getElementById("countLabel");
     const summaryEl = document.getElementById("pipelineSummary");
+    const searchWrap = document.querySelector(".search-wrap");
     const searchInput = document.getElementById("searchInput");
+    const searchPopover = document.getElementById("searchPopover");
+    const searchTokenPresets = document.getElementById("searchTokenPresets");
+    const searchParsed = document.getElementById("searchParsed");
     const sortSelect = document.getElementById("sortSelect");
     const filtersBtn = document.getElementById("filtersBtn");
     const filtersMenu = document.getElementById("filtersMenu");
@@ -1189,6 +1267,92 @@
       return STATUS.find((s) => s.id === id)?.label || id;
     }
 
+    function uniqueTopValues(values, limit = 6) {
+      const seen = new Set();
+      const out = [];
+      values.forEach((v) => {
+        const clean = String(v || "").trim();
+        if (!clean) return;
+        const key = clean.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        out.push(clean);
+      });
+      return out.slice(0, limit);
+    }
+
+    function parseSearchQuery(rawQuery) {
+      const query = String(rawQuery || "");
+      const tokens = { company: [], title: [], location: [], notes: [], status: [], mode: [] };
+      const tokenRegex = /\b(company|title|location|notes|status|mode):(?:"([^"]*)"|([^\s]+))/gi;
+      let match;
+      while ((match = tokenRegex.exec(query)) !== null) {
+        const field = match[1].toLowerCase();
+        const value = (match[2] || match[3] || "").trim().toLowerCase();
+        if (!value || !tokens[field]) continue;
+        tokens[field].push(value);
+      }
+      const freeText = query
+        .replace(/\b(company|title|location|notes|status|mode):(?:"[^"]*"|[^\s]+)/gi, " ")
+        .toLowerCase();
+      const terms = freeText.split(/\s+/).filter(Boolean);
+      return { tokens, terms };
+    }
+
+    function openSearchPopover() {
+      searchWrap.classList.add("open");
+      renderSearchPopover();
+    }
+
+    function closeSearchPopover() {
+      searchWrap.classList.remove("open");
+    }
+
+    function appendSearchToken(tokenText) {
+      const current = searchInput.value.trim();
+      searchInput.value = current ? `${current} ${tokenText}` : tokenText;
+      searchInput.focus();
+      state.search = searchInput.value;
+      render();
+      renderSearchPopover();
+    }
+
+    function renderSearchPopover() {
+      if (!searchPopover || !searchTokenPresets || !searchParsed) return;
+      const q = String(state.search || "").trim();
+      const parsed = parseSearchQuery(q);
+      const quickPresets = [
+        "company:",
+        "title:",
+        "location:",
+        "status:applied",
+        "status:in_progress",
+        "mode:remote",
+      ];
+      const dynamicCompany = uniqueTopValues(state.apps.map((a) => a.company)).map((v) => `company:\"${v}\"`);
+      const dynamicTitle = uniqueTopValues(state.apps.map((a) => a.title), 3).map((v) => `title:\"${v}\"`);
+      const dynamicLocation = uniqueTopValues(state.apps.map((a) => a.location), 3).map((v) => `location:\"${v}\"`);
+      const presetItems = [...quickPresets, ...dynamicCompany.slice(0, 3), ...dynamicTitle, ...dynamicLocation].slice(0, 12);
+
+      searchTokenPresets.innerHTML = presetItems
+        .map((p) => `<button type="button" class="search-token-btn" data-token="${escapeHtml(p)}">${escapeHtml(p)}</button>`)
+        .join("");
+
+      const chips = [];
+      Object.entries(parsed.tokens).forEach(([field, values]) => {
+        values.forEach((value) => chips.push(`<span class="search-token-chip">${escapeHtml(field)}:${escapeHtml(value)}</span>`));
+      });
+      parsed.terms.forEach((term) => chips.push(`<span class="search-token-chip">text:${escapeHtml(term)}</span>`));
+      searchParsed.innerHTML = chips.length ? chips.join("") : `<span class="small">Type text or token filters. Example: <code>company:Q2 status:applied backend</code></span>`;
+
+      searchTokenPresets.querySelectorAll("[data-token]").forEach((btn) => {
+        btn.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          appendSearchToken(btn.dataset.token);
+        });
+      });
+    }
+
     function normalizeStatusHistory(app) {
       if (!Array.isArray(app.statusHistory)) {
         app.statusHistory = [];
@@ -1199,13 +1363,24 @@
     }
 
     function filteredApps() {
-      const q = state.search.trim().toLowerCase();
+      const parsed = parseSearchQuery(state.search);
+      const { tokens, terms } = parsed;
       const base = state.apps.filter((app) => {
         if (state.statusFilter !== "all" && app.status !== state.statusFilter) return false;
         if (state.modeFilter !== "all" && app.workMode !== state.modeFilter) return false;
-        if (!q) return true;
+        if (tokens.company.some((v) => !String(app.company || "").toLowerCase().includes(v))) return false;
+        if (tokens.title.some((v) => !String(app.title || "").toLowerCase().includes(v))) return false;
+        if (tokens.location.some((v) => !String(app.location || "").toLowerCase().includes(v))) return false;
+        if (tokens.notes.some((v) => !String(app.note || "").toLowerCase().includes(v))) return false;
+        if (tokens.status.some((v) => {
+          const statusId = String(app.status || "").toLowerCase();
+          const statusLabel = String(getStatusLabel(app.status) || "").toLowerCase();
+          return !(statusId.includes(v) || statusLabel.includes(v));
+        })) return false;
+        if (tokens.mode.some((v) => !String(app.workMode || "").toLowerCase().includes(v))) return false;
+        if (!terms.length) return true;
         const hay = `${app.company} ${app.title} ${app.location} ${app.note}`.toLowerCase();
-        return hay.includes(q);
+        return terms.every((t) => hay.includes(t));
       });
       const sorted = [...base];
       if (state.sortBy === "company_asc") {
@@ -1672,6 +1847,7 @@
       renderFilters();
       renderList();
       renderDetail();
+      if (searchWrap.classList.contains("open")) renderSearchPopover();
     }
 
     function openNewDialog() {
@@ -1805,6 +1981,18 @@
     searchInput.addEventListener("input", (e) => {
       state.search = e.target.value;
       render();
+      renderSearchPopover();
+    });
+
+    searchInput.addEventListener("focus", () => {
+      openSearchPopover();
+    });
+
+    searchInput.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        closeSearchPopover();
+        searchInput.blur();
+      }
     });
 
     sortSelect.addEventListener("change", (e) => {
@@ -1941,6 +2129,7 @@
       const inFilters = e.target.closest("#filtersBtn, #filtersMenu");
       if (!inData) dataMenu.classList.remove("open");
       if (!inFilters) filtersMenu.classList.remove("open");
+      if (!e.target.closest(".search-wrap")) closeSearchPopover();
     }, true);
 
     topBar.addEventListener("click", (e) => {
@@ -1955,6 +2144,7 @@
         e.preventDefault();
         searchInput.focus();
         searchInput.select();
+        openSearchPopover();
         return;
       }
 
@@ -1967,6 +2157,7 @@
       if (e.key === "Escape") {
         dataMenu.classList.remove("open");
         filtersMenu.classList.remove("open");
+        closeSearchPopover();
         closeStatusDialog();
         closeNewDialog();
       }
