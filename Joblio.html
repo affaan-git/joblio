@@ -526,11 +526,6 @@
       background: var(--primary-soft);
     }
 
-    .intake-actions {
-      display: flex;
-      justify-content: flex-end;
-    }
-
     .core-header {
       display: flex;
       align-items: center;
@@ -1344,10 +1339,10 @@
 
           <section class="section area-intake">
             <div class="section-title">Job intake</div>
-            <p class="workspace-copy">Paste full job description text for reference while you complete the application.</p>
-            <textarea id="intakeInput" placeholder="Paste job posting text, requirements, compensation details, and links...">${escapeHtml(app.intakeText || "")}</textarea>
-            <div class="intake-actions">
-              <button id="clearIntakeBtn" class="btn">Clear</button>
+            <div class="muted-help">Paste full job description text for reference while you complete the application.</div>
+            <div class="field">
+              <label class="label" for="intakeInput">Description</label>
+              <textarea id="intakeInput" placeholder="Paste job posting text, requirements, compensation details, and links...">${escapeHtml(app.intakeText || "")}</textarea>
             </div>
           </section>
 
@@ -1472,14 +1467,6 @@
         app.intakeText = intakeInput.value;
         app.updatedAt = nowIso();
         persist();
-      });
-
-      document.getElementById("clearIntakeBtn").addEventListener("click", () => {
-        app.intakeText = "";
-        app.updatedAt = nowIso();
-        persist();
-        intakeInput.value = "";
-        showToast("Intake content cleared.");
       });
 
       document.getElementById("deleteAppBtn").addEventListener("click", () => {
