@@ -1,0 +1,2203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CareerSentry Tracker</title>
+  <style>
+    :root {
+      --bg: #0b1018;
+      --bg-elevated: #121927;
+      --bg-panel: #0f1724;
+      --bg-hover: #1c2534;
+      --border: #2a3444;
+      --text: #f8fafc;
+      --text-muted: #95a3b8;
+      --primary: #4f8ff8;
+      --primary-soft: rgba(79, 143, 248, 0.15);
+      --success: #22c55e;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --info: #38bdf8;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+    }
+
+    body.theme-light {
+      --bg: #f3f6fb;
+      --bg-elevated: #ffffff;
+      --bg-panel: #f8fbff;
+      --bg-hover: #edf2fa;
+      --border: #d7dfec;
+      --text: #0f172a;
+      --text-muted: #607089;
+      --primary: #2563eb;
+      --primary-soft: rgba(37, 99, 235, 0.12);
+      --success: #16a34a;
+      --warn: #d97706;
+      --danger: #dc2626;
+      --info: #0284c7;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    *:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+    }
+
+    .top-bar {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 0.8rem;
+      padding: 0.72rem 1.1rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-elevated);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+
+    .brand-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(135deg, #1f2937, #334155);
+      color: #fbbf24;
+      font-size: 0.8rem;
+    }
+
+    body.theme-light .brand-icon {
+      background: linear-gradient(135deg, #e2e8f0, #f1f5f9);
+      color: #b45309;
+    }
+
+    .center-controls {
+      max-width: 860px;
+      width: 100%;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) 170px 120px;
+      align-items: center;
+      gap: 0.45rem;
+    }
+
+    .search-wrap { width: 100%; position: relative; }
+
+    .search {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.52rem 0.82rem;
+      background: var(--bg-panel);
+      color: var(--text);
+      outline: none;
+      font-size: 0.87rem;
+    }
+
+    .search:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px var(--primary-soft);
+    }
+
+    .top-actions {
+      display: flex;
+      gap: 0.4rem;
+      align-items: center;
+    }
+
+    .btn {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--bg-panel);
+      color: var(--text-muted);
+      padding: 0.4rem 0.72rem;
+      font-size: 0.81rem;
+      cursor: pointer;
+      transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+    }
+
+    .btn:hover { background: var(--bg-hover); color: var(--text); }
+    .btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .btn.primary:hover { filter: brightness(1.03); }
+
+    .layout {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: var(--left-panel-width, 372px) 8px minmax(0, 1fr);
+    }
+
+    .left {
+      border-right: none;
+      background: var(--bg-panel);
+      overflow-y: auto;
+    }
+
+    .right {
+      overflow-y: auto;
+      background: linear-gradient(180deg, var(--bg), var(--bg-panel));
+    }
+
+    .col-resizer {
+      cursor: col-resize;
+      background: transparent;
+      position: relative;
+    }
+
+    .col-resizer::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      width: 1px;
+      left: 0;
+      background: var(--border);
+      opacity: 0.65;
+    }
+
+    .col-resizer:hover::before,
+    .col-resizer.dragging::before {
+      background: var(--primary);
+      opacity: 1;
+    }
+
+    .left-head {
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border);
+      padding: 0.7rem 0.9rem;
+      box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
+    }
+
+    .left-meta {
+      display: flex;
+      justify-content: space-between;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+
+    select {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 0.42rem 0.48rem;
+      background: var(--bg-elevated);
+      color: var(--text);
+      font-size: 0.81rem;
+    }
+
+    .card {
+      border-bottom: 1px solid var(--border);
+      padding: 0.74rem 0.9rem;
+      cursor: pointer;
+      display: grid;
+      gap: 0.35rem;
+      transition: background 0.14s ease;
+    }
+
+    .card:hover { background: var(--bg-hover); }
+    .card.active { background: var(--primary-soft); box-shadow: inset 3px 0 0 var(--primary); }
+
+    .card-title {
+      font-size: 0.92rem;
+      font-weight: 650;
+      line-height: 1.25;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+    .card-sub { color: var(--text-muted); font-size: 0.81rem; line-height: 1.25; }
+    .card-row { display: flex; justify-content: space-between; align-items: center; gap: 0.4rem; min-width: 0; }
+    .small { color: var(--text-muted); font-size: 0.75rem; }
+    .small.overdue { color: var(--danger); font-weight: 600; }
+
+    .card-main-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.4rem;
+    }
+
+    .card-right-actions {
+      display: grid;
+      grid-template-columns: minmax(78px, auto) 22px;
+      align-items: center;
+      column-gap: 4px;
+      position: relative;
+    }
+
+    .menu-btn {
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+      border-radius: 999px;
+      width: 26px;
+      height: 26px;
+      font-size: 0.8rem;
+      line-height: 1;
+      cursor: pointer;
+      transition: background 0.14s ease, color 0.14s ease;
+    }
+
+    .menu-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text);
+    }
+
+    .card-delete-btn {
+      width: 22px;
+      height: 22px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 0;
+    }
+
+    .pill.card-status-btn {
+      border-radius: 999px;
+      cursor: pointer;
+      min-width: 78px;
+      justify-content: center;
+    }
+
+    .action-menu-wrap {
+      position: relative;
+      width: max-content;
+      justify-self: start;
+    }
+
+    .action-menu {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      z-index: 12;
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      border-radius: 10px;
+      min-width: 130px;
+      display: none;
+      padding: 0.2rem;
+      box-shadow: 0 10px 26px rgba(0, 0, 0, 0.22);
+      animation: menu-in 0.12s ease;
+    }
+
+    .action-menu.open { display: grid; }
+
+    .action-menu button {
+      border: none;
+      background: transparent;
+      color: var(--text);
+      text-align: left;
+      font-size: 0.78rem;
+      padding: 0.32rem 0.42rem;
+      border-radius: 7px;
+      cursor: pointer;
+    }
+
+    .action-menu button:hover {
+      background: var(--bg-hover);
+    }
+
+    .filter-menu {
+      width: min(260px, 78vw);
+      gap: 0.45rem;
+      padding: 0.5rem;
+    }
+
+    .filter-group {
+      display: grid;
+      gap: 0.26rem;
+    }
+
+    .filter-actions {
+      display: flex;
+      justify-content: flex-end;
+      padding-top: 0.2rem;
+    }
+
+    .filter-actions .btn {
+      padding: 0.3rem 0.58rem;
+      font-size: 0.76rem;
+      background: var(--bg-panel);
+      border-color: var(--border);
+      color: var(--text);
+    }
+
+    .filter-actions .btn:hover {
+      background: var(--bg-hover);
+    }
+
+    .filter-group label {
+      font-size: 0.73rem;
+      color: var(--text-muted);
+    }
+
+    .create-panel { display: none; }
+    .create-panel.active { display: grid; gap: 0.56rem; }
+    .muted-help {
+      color: var(--text-muted);
+      font-size: 0.76rem;
+      line-height: 1.35;
+    }
+
+    .pill {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.12rem 0.52rem;
+      font-size: 0.73rem;
+      color: var(--text-muted);
+      background: var(--bg-elevated);
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.2rem;
+    }
+
+    .pill.status-wishlist { color: var(--text-muted); }
+    .pill.status-in_progress { color: var(--warn); border-color: var(--warn); background: rgba(245, 158, 11, 0.12); }
+    .pill.status-applied { color: var(--primary); border-color: var(--primary); background: var(--primary-soft); }
+    .pill.status-interview { color: var(--info); border-color: var(--info); background: rgba(56, 189, 248, 0.14); }
+    .pill.status-offer { color: var(--success); border-color: var(--success); background: rgba(34, 197, 94, 0.12); }
+    .pill.status-rejected, .pill.status-closed { color: var(--danger); border-color: var(--danger); background: rgba(239, 68, 68, 0.11); }
+    button.pill { cursor: pointer; }
+
+    .detail {
+      max-width: 1080px;
+      padding: 0.78rem 0.95rem 0.9rem;
+      display: grid;
+      gap: 0.62rem;
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(320px, 1fr);
+      grid-template-areas:
+        "core links"
+        "workspace insights"
+        "workspace insights"
+        "note insights";
+      gap: 0.72rem;
+    }
+
+    .area-core { grid-area: core; }
+    .area-workspace { grid-area: workspace; }
+    .area-insights { grid-area: insights; }
+    .area-note { grid-area: note; }
+    .area-links { grid-area: links; }
+
+    .detail-empty {
+      margin-top: 2rem;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    .section {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--bg-elevated);
+      padding: 0.64rem;
+      display: grid;
+      gap: 0.48rem;
+      box-shadow: 0 1px 0 rgba(0, 0, 0, 0.12);
+    }
+
+    .section-title { font-size: 0.87rem; font-weight: 700; letter-spacing: 0.01em; }
+
+    .section-title::after {
+      content: "";
+      display: block;
+      height: 1px;
+      margin-top: 0.38rem;
+      background: linear-gradient(90deg, var(--border), transparent);
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.56rem;
+    }
+
+    .field { display: grid; gap: 0.28rem; }
+    .label { font-size: 0.74rem; color: var(--text-muted); }
+
+    input[type="text"],
+    input[type="url"],
+    input[type="date"],
+    textarea {
+      border: 1px solid var(--border);
+      background: var(--bg-panel);
+      color: var(--text);
+      border-radius: var(--radius-sm);
+      padding: 0.46rem 0.56rem;
+      width: 100%;
+      font-size: 0.84rem;
+    }
+
+    textarea { min-height: 92px; resize: vertical; }
+    .area-note textarea { min-height: 84px; }
+
+    .workspace-copy {
+      color: var(--text-muted);
+      font-size: 0.83rem;
+      line-height: 1.4;
+    }
+
+    .drop-zone {
+      border: 1.5px dashed var(--border);
+      border-radius: var(--radius-md);
+      padding: 0.85rem;
+      background: var(--bg-panel);
+      color: var(--text-muted);
+      font-size: 0.82rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.14s ease, background 0.14s ease;
+    }
+
+    .drop-zone.highlight {
+      border-color: var(--primary);
+      background: var(--primary-soft);
+      color: var(--text);
+    }
+
+    .workspace-files {
+      margin-top: 0.55rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      justify-content: flex-start;
+    }
+
+    .file-pill {
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      border-radius: 999px;
+      padding: 0.16rem 0.54rem;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .insights-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.52rem;
+    }
+
+    .insights-tabs {
+      display: flex;
+      gap: 0.4rem;
+    }
+
+    .insights-tab {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--bg-panel);
+      color: var(--text-muted);
+      padding: 0.3rem 0.6rem;
+      font-size: 0.77rem;
+      cursor: pointer;
+    }
+
+    .insights-tab.active {
+      border-color: var(--primary);
+      color: var(--primary);
+      background: var(--primary-soft);
+    }
+
+    .insight-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--bg-panel);
+      padding: 0.52rem;
+      display: grid;
+      gap: 0.26rem;
+      min-height: 84px;
+    }
+
+    .insight-card strong {
+      font-size: 0.74rem;
+      color: var(--text-muted);
+      letter-spacing: 0.01em;
+    }
+
+    .insight-text {
+      font-size: 0.8rem;
+      line-height: 1.35;
+      color: var(--text);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .intake-actions {
+      display: flex;
+      gap: 0.45rem;
+      flex-wrap: wrap;
+    }
+
+    .preview {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--bg-panel);
+      padding: 0.55rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      display: grid;
+      gap: 0.32rem;
+    }
+
+    .preview strong {
+      color: var(--text);
+    }
+
+    .confidence {
+      display: inline-block;
+      margin-left: 0.25rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      padding: 0.02rem 0.4rem;
+      font-size: 0.69rem;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+
+    .confidence.high {
+      color: var(--success);
+      border-color: var(--success);
+      background: rgba(34, 197, 94, 0.12);
+    }
+
+    .confidence.medium {
+      color: var(--warn);
+      border-color: var(--warn);
+      background: rgba(245, 158, 11, 0.12);
+    }
+
+    .confidence.low {
+      color: var(--text-muted);
+      border-color: var(--border);
+      background: var(--bg-elevated);
+    }
+
+    .preview-row {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .preview-row input[type="checkbox"] {
+      accent-color: var(--primary);
+    }
+
+    .intake-url-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 0.4rem;
+    }
+
+    .freshness {
+      color: var(--text-muted);
+      font-size: 0.74rem;
+    }
+
+    .core-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .core-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .status-trigger {
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      padding: 0.38rem 0.72rem;
+      font-size: 0.8rem;
+      cursor: pointer;
+      background: var(--bg-panel);
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .status-trigger.status-in_progress {
+      color: var(--warn);
+      border-color: var(--warn);
+      background: rgba(245, 158, 11, 0.12);
+    }
+
+    .status-trigger.status-applied {
+      color: var(--primary);
+      border-color: var(--primary);
+      background: var(--primary-soft);
+    }
+
+    .status-trigger.status-interview {
+      color: var(--info);
+      border-color: var(--info);
+      background: rgba(56, 189, 248, 0.14);
+    }
+
+    .status-trigger.status-offer {
+      color: var(--success);
+      border-color: var(--success);
+      background: rgba(34, 197, 94, 0.12);
+    }
+
+    .status-trigger.status-rejected,
+    .status-trigger.status-closed {
+      color: var(--danger);
+      border-color: var(--danger);
+      background: rgba(239, 68, 68, 0.11);
+    }
+
+    .status-dialog-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.5rem;
+    }
+
+    .status-history-list {
+      max-height: 42vh;
+      overflow: auto;
+      display: grid;
+      gap: 0.35rem;
+      padding-right: 0.2rem;
+    }
+
+    .status-history-item {
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 0.45rem 0.52rem;
+      background: var(--bg-panel);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.45rem;
+    }
+
+    .dialog-btn {
+      border: 1px solid var(--border);
+      background: var(--bg-panel);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 0.56rem 0.62rem;
+      text-align: left;
+      cursor: pointer;
+      font-size: 0.82rem;
+    }
+
+    .dialog-btn:hover {
+      background: var(--bg-hover);
+    }
+
+    .dialog-btn[data-status-action="in_progress"] {
+      color: var(--warn);
+      border-color: var(--warn);
+      background: rgba(245, 158, 11, 0.12);
+    }
+
+    .dialog-btn[data-status-action="applied"] {
+      color: var(--primary);
+      border-color: var(--primary);
+      background: var(--primary-soft);
+    }
+
+    .dialog-btn[data-status-action="interview"] {
+      color: var(--info);
+      border-color: var(--info);
+      background: rgba(56, 189, 248, 0.14);
+    }
+
+    .dialog-btn[data-status-action="offer"] {
+      color: var(--success);
+      border-color: var(--success);
+      background: rgba(34, 197, 94, 0.12);
+    }
+
+    .dialog-btn[data-status-action="rejected"],
+    .dialog-btn[data-status-action="closed"] {
+      color: var(--danger);
+      border-color: var(--danger);
+      background: rgba(239, 68, 68, 0.11);
+    }
+
+    .dialog-btn[data-status-action="cancel"] {
+      color: var(--text-muted);
+      border-color: var(--border);
+      background: rgba(148, 163, 184, 0.12);
+    }
+
+    .dialog-wrap {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.58);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+    }
+
+    .dialog-wrap.open { display: flex; }
+
+    .dialog {
+      width: min(540px, 92vw);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 0.95rem;
+      display: grid;
+      gap: 0.72rem;
+      animation: menu-in 0.14s ease;
+    }
+
+    .toast-wrap {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      z-index: 45;
+      display: grid;
+      gap: 0.45rem;
+      width: min(360px, 90vw);
+    }
+
+    .toast {
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 0.52rem 0.62rem;
+      font-size: 0.8rem;
+      box-shadow: 0 10px 26px rgba(0, 0, 0, 0.2);
+      animation: toast-in 0.14s ease;
+    }
+
+    .toast.success { border-color: var(--success); }
+    .toast.warn { border-color: var(--warn); }
+    .toast.error { border-color: var(--danger); }
+
+    @keyframes menu-in {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes toast-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 980px) {
+      .layout { grid-template-columns: 1fr; }
+      .col-resizer { display: none; }
+      .left { max-height: 45vh; }
+      .grid-2 { grid-template-columns: 1fr; }
+      .center-controls { grid-template-columns: 1fr 1fr 120px; }
+      .detail-grid {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+          "core"
+          "workspace"
+          "insights"
+          "note"
+          "links";
+      }
+      .insights-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 760px) {
+      .top-bar {
+        grid-template-columns: 1fr;
+        gap: 0.6rem;
+      }
+      .brand {
+        justify-content: center;
+      }
+      .top-actions {
+        justify-content: center;
+      }
+      .center-controls {
+        grid-template-columns: 1fr;
+      }
+      .status-dialog-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header class="top-bar">
+    <div class="brand">
+      <div class="brand-icon">CS</div>
+      <span>CareerSentry Tracker</span>
+    </div>
+
+    <div class="center-controls">
+      <div class="search-wrap">
+        <input id="searchInput" class="search" placeholder="Search company, title, location, notes" />
+      </div>
+      <select id="sortSelect"></select>
+      <div class="action-menu-wrap">
+        <button id="filtersBtn" class="btn" aria-label="Open filters">Filters</button>
+        <div id="filtersMenu" class="action-menu filter-menu">
+          <div class="filter-group">
+            <label for="statusFilter">Status</label>
+            <select id="statusFilter"></select>
+          </div>
+          <div class="filter-group">
+            <label for="modeFilter">Work mode</label>
+            <select id="modeFilter"></select>
+          </div>
+          <div id="filterActions" class="filter-actions" style="display:none;">
+            <button id="resetFiltersBtn" class="btn" type="button">Reset filters</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <div class="action-menu-wrap">
+        <button id="dataBtn" class="btn" title="Import / export" aria-label="Open import and export actions">↻</button>
+        <div id="dataMenu" class="action-menu">
+          <button id="exportBtn">Export JSON</button>
+          <button id="importBtn">Import JSON</button>
+        </div>
+      </div>
+      <input id="importInput" type="file" accept="application/json" style="display:none;" />
+      <button id="themeToggle" class="btn" title="Toggle theme" aria-label="Toggle theme">☀</button>
+      <button id="newBtn" class="btn primary">+ New</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="left">
+      <div class="left-head">
+        <div class="left-meta">
+          <span id="countLabel">Applications (0)</span>
+          <span id="pipelineSummary">Applied: 0</span>
+        </div>
+      </div>
+      <div id="list"></div>
+    </section>
+
+    <div id="colResizer" class="col-resizer" title="Drag to resize, double-click to reset"></div>
+
+    <section class="right">
+      <div class="detail" id="detail"></div>
+    </section>
+  </main>
+
+  <div class="dialog-wrap" id="newDialog">
+    <div class="dialog">
+      <div class="section-title">Create Application</div>
+      <div class="insights-tabs">
+        <button id="newTabPost" class="insights-tab active" type="button">From Job Post</button>
+        <button id="newTabManual" class="insights-tab" type="button">Manual</button>
+      </div>
+
+      <div id="newPanelPost" class="create-panel active">
+        <p class="muted-help">Paste a job URL and/or description to create quickly. Company and role can be inferred.</p>
+        <div class="field">
+          <label class="label" for="newPostUrl">Job URL (optional)</label>
+          <input id="newPostUrl" type="url" placeholder="https://..." />
+        </div>
+        <div class="field">
+          <label class="label" for="newPostText">Job description text (optional if URL is provided)</label>
+          <textarea id="newPostText" placeholder="Paste the job posting text here..."></textarea>
+        </div>
+      </div>
+
+      <div id="newPanelManual" class="create-panel">
+        <div class="grid-2">
+          <div class="field">
+            <label class="label" for="newTitle">Role title</label>
+            <input id="newTitle" type="text" />
+          </div>
+          <div class="field">
+            <label class="label" for="newCompany">Company</label>
+            <input id="newCompany" type="text" />
+          </div>
+          <div class="field">
+            <label class="label" for="newLocation">Location</label>
+            <input id="newLocation" type="text" placeholder="Austin, TX / Remote" />
+          </div>
+          <div class="field">
+            <label class="label" for="newMode">Work mode</label>
+            <select id="newMode"></select>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:0.45rem;">
+        <button id="newCancel" class="btn">Cancel</button>
+        <button id="newCreate" class="btn primary">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toastWrap" class="toast-wrap" aria-live="polite" aria-atomic="true"></div>
+
+  <div class="dialog-wrap" id="statusDialog">
+    <div class="dialog">
+      <div class="section-title">Set application status</div>
+      <div class="insights-tabs">
+        <button id="statusTabUpdate" class="insights-tab active">Update</button>
+        <button id="statusTabHistory" class="insights-tab">History</button>
+      </div>
+      <div id="statusUpdateView">
+        <div class="status-dialog-grid">
+          <button class="dialog-btn" data-status-action="in_progress">In progress</button>
+          <button class="dialog-btn" data-status-action="applied">Applied</button>
+          <button class="dialog-btn" data-status-action="interview">Interview</button>
+          <button class="dialog-btn" data-status-action="offer">Offer</button>
+          <button class="dialog-btn" data-status-action="rejected">Rejected</button>
+          <button class="dialog-btn" data-status-action="closed">Closed</button>
+          <button class="dialog-btn" data-status-action="wishlist">Wishlist</button>
+          <button class="dialog-btn" data-status-action="cancel">Cancel</button>
+        </div>
+      </div>
+      <div id="statusHistoryView" style="display:none;">
+        <div style="display:flex; justify-content:flex-end;">
+          <button id="clearStatusHistoryBtn" class="btn">Clear history</button>
+        </div>
+        <div id="statusHistoryList" class="status-history-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = "careersentry-tracker-v1";
+    const STATUS = [
+      { id: "wishlist", label: "Wishlist" },
+      { id: "in_progress", label: "In progress" },
+      { id: "applied", label: "Applied" },
+      { id: "interview", label: "Interview" },
+      { id: "offer", label: "Offer" },
+      { id: "rejected", label: "Rejected" },
+      { id: "closed", label: "Closed" },
+    ];
+    const MODES = ["Unknown", "On-site", "Hybrid", "Remote"];
+    const EMPTY_INSIGHTS = {
+      summary: "",
+      requirements: "",
+      compSignals: "",
+      fit: "",
+    };
+
+    const state = {
+      apps: [],
+      activeId: null,
+      pendingIntakeFocusId: null,
+      newDialogMode: "post",
+      search: "",
+      sortBy: "recent_update",
+      statusFilter: "all",
+      modeFilter: "all",
+      theme: "dark",
+    };
+
+    const topBar = document.querySelector(".top-bar");
+    const listEl = document.getElementById("list");
+    const layoutEl = document.querySelector(".layout");
+    const colResizer = document.getElementById("colResizer");
+    const detailEl = document.getElementById("detail");
+    const countLabel = document.getElementById("countLabel");
+    const summaryEl = document.getElementById("pipelineSummary");
+    const searchInput = document.getElementById("searchInput");
+    const sortSelect = document.getElementById("sortSelect");
+    const filtersBtn = document.getElementById("filtersBtn");
+    const filtersMenu = document.getElementById("filtersMenu");
+    const filterActions = document.getElementById("filterActions");
+    const resetFiltersBtn = document.getElementById("resetFiltersBtn");
+    const statusFilter = document.getElementById("statusFilter");
+    const modeFilter = document.getElementById("modeFilter");
+    const themeToggle = document.getElementById("themeToggle");
+    const dataBtn = document.getElementById("dataBtn");
+    const dataMenu = document.getElementById("dataMenu");
+    const exportBtn = document.getElementById("exportBtn");
+    const importBtn = document.getElementById("importBtn");
+    const importInput = document.getElementById("importInput");
+
+    const newBtn = document.getElementById("newBtn");
+    const newDialog = document.getElementById("newDialog");
+    const newCancel = document.getElementById("newCancel");
+    const newCreate = document.getElementById("newCreate");
+    const newTabPost = document.getElementById("newTabPost");
+    const newTabManual = document.getElementById("newTabManual");
+    const newPanelPost = document.getElementById("newPanelPost");
+    const newPanelManual = document.getElementById("newPanelManual");
+    const newPostUrl = document.getElementById("newPostUrl");
+    const newPostText = document.getElementById("newPostText");
+    const newCompany = document.getElementById("newCompany");
+    const newTitle = document.getElementById("newTitle");
+    const newLocation = document.getElementById("newLocation");
+    const newMode = document.getElementById("newMode");
+    const statusDialog = document.getElementById("statusDialog");
+    const statusTabUpdate = document.getElementById("statusTabUpdate");
+    const statusTabHistory = document.getElementById("statusTabHistory");
+    const statusUpdateView = document.getElementById("statusUpdateView");
+    const statusHistoryView = document.getElementById("statusHistoryView");
+    const statusHistoryList = document.getElementById("statusHistoryList");
+    const clearStatusHistoryBtn = document.getElementById("clearStatusHistoryBtn");
+    const toastWrap = document.getElementById("toastWrap");
+    let statusDialogAppId = null;
+    const LEFT_PANEL_DEFAULT = 372;
+    const LEFT_PANEL_MIN = 300;
+    const LEFT_PANEL_MAX = 620;
+
+    function uid() {
+      return `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+    }
+
+    function nowIso() {
+      return new Date().toISOString();
+    }
+
+    function todayDateStr() {
+      return new Date().toISOString().slice(0, 10);
+    }
+
+    function fmtDate(iso) {
+      if (!iso) return "";
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return "";
+      return d.toLocaleString([], {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    }
+
+    function isOverdueDate(dateStr) {
+      if (!dateStr) return false;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const target = new Date(`${dateStr}T00:00:00`);
+      if (Number.isNaN(target.getTime())) return false;
+      return target < today;
+    }
+
+    function escapeHtml(v) {
+      return String(v || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function syncThemeLabel() {
+      const toDark = state.theme === "light";
+      themeToggle.textContent = toDark ? "☾" : "☀";
+      themeToggle.title = toDark ? "Switch to dark mode" : "Switch to light mode";
+      themeToggle.setAttribute("aria-label", toDark ? "Switch to dark mode" : "Switch to light mode");
+    }
+
+    function showToast(message, type = "") {
+      const toast = document.createElement("div");
+      toast.className = `toast ${type}`.trim();
+      toast.textContent = message;
+      toastWrap.appendChild(toast);
+      setTimeout(() => {
+        toast.remove();
+      }, 3000);
+    }
+
+    function createApp({ company, title, location = "", workMode = "Unknown" }) {
+      const t = nowIso();
+      return {
+        id: uid(),
+        company,
+        title,
+        location,
+        workMode,
+        status: "wishlist",
+        statusHistory: [{ status: "wishlist", at: t }],
+        statusUpdatedAt: t,
+        appliedAt: "",
+        nextFollowUpAt: "",
+        jobUrl: "",
+        applicationUrl: "",
+        note: "",
+        workspaceFiles: [],
+        intakeText: "",
+        intakeUrl: "",
+        intakePreview: null,
+        insightsView: "quick",
+        insights: { ...EMPTY_INSIGHTS },
+        insightsGeneratedAt: null,
+        createdAt: t,
+        updatedAt: t,
+      };
+    }
+
+    function persist() {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          apps: state.apps,
+          activeId: state.activeId,
+          theme: state.theme,
+        })
+      );
+    }
+
+    function hydrate() {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        try {
+          const data = JSON.parse(raw);
+          state.apps = Array.isArray(data.apps) ? data.apps : [];
+          state.activeId = data.activeId || null;
+          state.theme = data.theme === "light" ? "light" : "dark";
+        } catch {
+          state.apps = [];
+        }
+      }
+
+      if (!state.apps.length) {
+        state.apps = [
+          createApp({ company: "Q2", title: "Software Engineer", location: "Austin, TX", workMode: "Hybrid" }),
+          createApp({ company: "AWS", title: "Security Automation Engineer", location: "Austin, TX", workMode: "On-site" }),
+        ];
+      }
+
+      state.activeId = state.activeId || state.apps[0]?.id || null;
+      document.body.classList.toggle("theme-light", state.theme === "light");
+      syncThemeLabel();
+      const savedWidth = Number(localStorage.getItem("careersentry-left-width"));
+      if (savedWidth && Number.isFinite(savedWidth)) {
+        const clamped = Math.max(LEFT_PANEL_MIN, Math.min(LEFT_PANEL_MAX, savedWidth));
+        document.documentElement.style.setProperty("--left-panel-width", `${clamped}px`);
+      }
+    }
+
+    function getStatusLabel(id) {
+      return STATUS.find((s) => s.id === id)?.label || id;
+    }
+
+    function normalizeStatusHistory(app) {
+      if (!Array.isArray(app.statusHistory)) {
+        app.statusHistory = [];
+      }
+      if (!app.statusHistory.length && app.status && app.statusUpdatedAt) {
+        app.statusHistory = [{ status: app.status, at: app.statusUpdatedAt }];
+      }
+    }
+
+    function filteredApps() {
+      const q = state.search.trim().toLowerCase();
+      const base = state.apps.filter((app) => {
+        if (state.statusFilter !== "all" && app.status !== state.statusFilter) return false;
+        if (state.modeFilter !== "all" && app.workMode !== state.modeFilter) return false;
+        if (!q) return true;
+        const hay = `${app.company} ${app.title} ${app.location} ${app.note}`.toLowerCase();
+        return hay.includes(q);
+      });
+      const sorted = [...base];
+      if (state.sortBy === "company_asc") {
+        sorted.sort((a, b) => a.company.localeCompare(b.company));
+      } else if (state.sortBy === "company_desc") {
+        sorted.sort((a, b) => b.company.localeCompare(a.company));
+      } else if (state.sortBy === "title_asc") {
+        sorted.sort((a, b) => a.title.localeCompare(b.title));
+      } else if (state.sortBy === "oldest_create") {
+        sorted.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
+      } else {
+        sorted.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+      }
+      return sorted;
+    }
+
+    function renderFilters() {
+      sortSelect.innerHTML = [
+        `<option value=\"recent_update\">Sort: Recently updated</option>`,
+        `<option value=\"oldest_create\">Sort: Oldest created</option>`,
+        `<option value=\"company_asc\">Sort: Company A-Z</option>`,
+        `<option value=\"company_desc\">Sort: Company Z-A</option>`,
+        `<option value=\"title_asc\">Sort: Title A-Z</option>`,
+      ].join("");
+      sortSelect.value = state.sortBy;
+
+      statusFilter.innerHTML = [
+        `<option value=\"all\">Status: All</option>`,
+        ...STATUS.map((s) => `<option value=\"${s.id}\">${s.label}</option>`),
+      ].join("");
+      statusFilter.value = state.statusFilter;
+
+      modeFilter.innerHTML = [
+        `<option value=\"all\">Mode: All</option>`,
+        ...MODES.map((m) => `<option value=\"${m}\">${m}</option>`),
+      ].join("");
+      modeFilter.value = state.modeFilter;
+
+      const activeCount = [state.statusFilter !== "all", state.modeFilter !== "all"].filter(Boolean).length;
+      filtersBtn.textContent = activeCount ? `Filters (${activeCount})` : "Filters";
+      filterActions.style.display = activeCount ? "flex" : "none";
+
+      newMode.innerHTML = MODES.map((m) => `<option value=\"${m}\">${m}</option>`).join("");
+      newMode.value = "Unknown";
+    }
+
+    function renderList() {
+      const apps = filteredApps();
+      countLabel.textContent = `Applications (${apps.length})`;
+      const appliedCount = state.apps.filter((a) => a.status === "applied").length;
+      summaryEl.textContent = `Applied: ${appliedCount}`;
+
+      if (state.activeId && !apps.some((a) => a.id === state.activeId)) {
+        state.activeId = apps[0]?.id || null;
+      }
+
+      listEl.innerHTML = apps
+        .map((app) => {
+          const active = app.id === state.activeId ? " active" : "";
+          const overdue = isOverdueDate(app.nextFollowUpAt);
+          return `
+            <article class="card${active}" data-id="${app.id}">
+              <div class="card-main-row">
+                <div class="card-title">${escapeHtml(app.title)}</div>
+                <div class="card-right-actions">
+                  <button class="pill status-${app.status} card-status-btn" title="Set or update status" aria-label="Set or update status for ${escapeHtml(app.title)}" data-id="${app.id}">${escapeHtml(getStatusLabel(app.status))}</button>
+                  <button class="menu-btn card-delete-btn" title="Delete application" aria-label="Delete ${escapeHtml(app.title)} application" data-id="${app.id}">×</button>
+                </div>
+              </div>
+              <div class="card-sub">${escapeHtml(app.company)}${app.location ? ` • ${escapeHtml(app.location)}` : ""}</div>
+              <div class="card-row">
+                <span class="small">Updated ${fmtDate(app.statusUpdatedAt || app.updatedAt)}</span>
+                <span class="small ${overdue ? "overdue" : ""}">${overdue ? `Follow-up overdue • ${escapeHtml(app.workMode || "Unknown")}` : escapeHtml(app.workMode || "Unknown")}</span>
+              </div>
+            </article>
+          `;
+        })
+        .join("");
+
+      listEl.querySelectorAll(".card").forEach((card) => {
+        card.addEventListener("click", () => {
+          state.activeId = card.dataset.id;
+          persist();
+          render();
+        });
+      });
+
+      listEl.querySelectorAll(".card-status-btn").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const appId = btn.dataset.id;
+          state.activeId = appId;
+          persist();
+          openStatusDialog(appId, "update");
+        });
+      });
+
+      listEl.querySelectorAll(".card-delete-btn").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const appId = btn.dataset.id;
+          const app = state.apps.find((a) => a.id === appId);
+          if (!app) return;
+          const confirmed = window.confirm(`Delete "${app.title}" at "${app.company}"?`);
+          if (!confirmed) return;
+          const idx = state.apps.findIndex((a) => a.id === appId);
+          if (idx >= 0) state.apps.splice(idx, 1);
+          if (state.activeId === appId) {
+            state.activeId = filteredApps()[0]?.id || state.apps[0]?.id || null;
+          }
+          persist();
+          render();
+          showToast("Application deleted.", "warn");
+        });
+      });
+    }
+
+    function updateField(app, key, value) {
+      app[key] = value;
+      app.updatedAt = nowIso();
+      persist();
+      renderList();
+    }
+
+    function setStatus(app, nextStatus, options = {}) {
+      if (app.status === nextStatus) return;
+      const t = nowIso();
+      normalizeStatusHistory(app);
+      app.status = nextStatus;
+      if (nextStatus === "applied" && !options.preserveAppliedDate) {
+        app.appliedAt = todayDateStr();
+      }
+      app.statusUpdatedAt = t;
+      app.updatedAt = t;
+      app.statusHistory.unshift({ status: nextStatus, at: t });
+      persist();
+      render();
+      showToast(`Status updated to ${getStatusLabel(nextStatus)}.`, "success");
+    }
+
+    function ensureAppWorkspace(app) {
+      if (!Array.isArray(app.workspaceFiles)) {
+        app.workspaceFiles = [];
+      }
+      if (!app.insights || typeof app.insights !== "object") {
+        app.insights = { ...EMPTY_INSIGHTS };
+      }
+      if (typeof app.intakeText !== "string") {
+        app.intakeText = "";
+      }
+      if (typeof app.intakeUrl !== "string") {
+        app.intakeUrl = "";
+      }
+      if (!("intakePreview" in app)) {
+        app.intakePreview = null;
+      }
+      if (app.insightsView !== "quick" && app.insightsView !== "intake") {
+        app.insightsView = "quick";
+      }
+      if (!app.insightsGeneratedAt) {
+        app.insightsGeneratedAt = null;
+      }
+      normalizeStatusHistory(app);
+    }
+
+    function deriveWorkMode(text) {
+      const s = text.toLowerCase();
+      if (/\bhybrid\b/.test(s)) return "Hybrid";
+      if (/\bremote\b/.test(s)) return "Remote";
+      if (/\bon[-\s]?site\b|\bin office\b/.test(s)) return "On-site";
+      return "Unknown";
+    }
+
+    function parseIntakeText(text) {
+      const clean = text.trim();
+      if (!clean) return null;
+      const lines = clean.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      const lineBlob = lines.join(" ");
+
+      const titleMatch = clean.match(/(?:Role|Title|Position)\s*:\s*([^\n]+)/i);
+      const companyMatch = clean.match(/Company\s*:\s*([^\n]+)/i);
+      const locationMatch = clean.match(/Location\s*:\s*([^\n]+)/i);
+      const compensationMatch = clean.match(/(\$[\d,.kK]+\s*(?:-|to)\s*\$[\d,.kK]+|\$[\d,.kK]+\+?)/);
+
+      const bullets = lines.filter((line) => /^[-*•]/.test(line)).slice(0, 6);
+      const requirements = bullets.length
+        ? bullets.map((b) => b.replace(/^[-*•]\s*/, "")).join("\n")
+        : lines.filter((line) => /required|experience|proficient|must|years?/i.test(line)).slice(0, 4).join("\n");
+
+      const sentenceParts = lineBlob.split(/(?<=[.!?])\s+/).filter(Boolean);
+      const summary = sentenceParts.slice(0, 2).join(" ").slice(0, 280);
+      const fit = requirements
+        ? "Compare your resume to the extracted requirements and prioritize direct keyword matches."
+        : "Paste a fuller posting to generate stronger fit guidance.";
+
+      const confidence = {
+        title: titleMatch ? "high" : lines[0] ? "medium" : "low",
+        company: companyMatch ? "high" : /\binc\b|\bllc\b|\bcorp\b|\bcompany\b/i.test(clean) ? "medium" : "low",
+        location: locationMatch ? "high" : /\b(remote|hybrid|on-site|tx|ca|ny)\b/i.test(clean) ? "medium" : "low",
+        workMode: /\bhybrid\b|\bremote\b|\bon[-\s]?site\b|\bin office\b/i.test(clean) ? "high" : "low",
+      };
+
+      return {
+        title: (titleMatch?.[1] || lines[0] || "").trim(),
+        company: (companyMatch?.[1] || "").trim(),
+        location: (locationMatch?.[1] || "").trim(),
+        workMode: deriveWorkMode(clean),
+        confidence,
+        extractedAt: nowIso(),
+        insights: {
+          summary: summary || "Summary will appear after parsing a fuller posting.",
+          requirements: requirements || "Key requirements were not confidently detected.",
+          compSignals: compensationMatch ? `Detected compensation signal: ${compensationMatch[1]}` : "No explicit compensation text detected.",
+          fit,
+        },
+      };
+    }
+
+    function renderIntakePreview(preview) {
+      if (!preview) {
+        return "No parsed data yet. Paste a posting and click Extract fields.";
+      }
+      return [
+        `<label class="preview-row"><input type="checkbox" id="applyTitle" ${preview.title ? "checked" : ""} /><span><strong>Role:</strong> ${escapeHtml(preview.title || "Not detected")} <span class="confidence ${preview.confidence?.title || "low"}">${escapeHtml(preview.confidence?.title || "low")}</span></span></label>`,
+        `<label class="preview-row"><input type="checkbox" id="applyCompany" ${preview.company ? "checked" : ""} /><span><strong>Company:</strong> ${escapeHtml(preview.company || "Not detected")} <span class="confidence ${preview.confidence?.company || "low"}">${escapeHtml(preview.confidence?.company || "low")}</span></span></label>`,
+        `<label class="preview-row"><input type="checkbox" id="applyLocation" ${preview.location ? "checked" : ""} /><span><strong>Location:</strong> ${escapeHtml(preview.location || "Not detected")} <span class="confidence ${preview.confidence?.location || "low"}">${escapeHtml(preview.confidence?.location || "low")}</span></span></label>`,
+        `<label class="preview-row"><input type="checkbox" id="applyWorkMode" ${preview.workMode && preview.workMode !== "Unknown" ? "checked" : ""} /><span><strong>Work mode:</strong> ${escapeHtml(preview.workMode || "Unknown")} <span class="confidence ${preview.confidence?.workMode || "low"}">${escapeHtml(preview.confidence?.workMode || "low")}</span></span></label>`,
+        `<label class="preview-row"><input type="checkbox" id="applyInsights" checked /><span><strong>Update quick insights</strong></span></label>`,
+      ].join("");
+    }
+
+    function renderStatusHistory(app) {
+      normalizeStatusHistory(app);
+      if (!app.statusHistory.length) {
+        statusHistoryList.innerHTML = `<div class="small">No status history yet.</div>`;
+        return;
+      }
+      statusHistoryList.innerHTML = app.statusHistory
+        .map((entry) => `
+          <div class="status-history-item">
+            <span class="pill status-${escapeHtml(entry.status)}">${escapeHtml(getStatusLabel(entry.status))}</span>
+            <span class="small">${escapeHtml(fmtDate(entry.at))}</span>
+          </div>
+        `)
+        .join("");
+    }
+
+    function setStatusDialogView(view) {
+      const showUpdate = view !== "history";
+      statusUpdateView.style.display = showUpdate ? "" : "none";
+      statusHistoryView.style.display = showUpdate ? "none" : "";
+      statusTabUpdate.classList.toggle("active", showUpdate);
+      statusTabHistory.classList.toggle("active", !showUpdate);
+    }
+
+    function openStatusDialog(appId, view = "update") {
+      statusDialogAppId = appId;
+      const app = state.apps.find((a) => a.id === appId);
+      if (app) renderStatusHistory(app);
+      setStatusDialogView(view);
+      statusDialog.classList.add("open");
+    }
+
+    function closeStatusDialog() {
+      statusDialog.classList.remove("open");
+      statusDialogAppId = null;
+    }
+
+    async function fetchJobTextFromUrl(url) {
+      const res = await fetch(url, { mode: "cors" });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const contentType = res.headers.get("content-type") || "";
+      const raw = await res.text();
+      if (!contentType.includes("html")) {
+        return raw.slice(0, 12000);
+      }
+      const doc = new DOMParser().parseFromString(raw, "text/html");
+      const text = doc.body?.innerText || "";
+      return text.replace(/\n{3,}/g, "\n\n").trim().slice(0, 12000);
+    }
+
+    function renderDetail() {
+      const app = state.apps.find((a) => a.id === state.activeId);
+      if (!app) {
+        detailEl.innerHTML = `<div class=\"detail-empty\">Create or select an application to start tracking.</div>`;
+        return;
+      }
+      ensureAppWorkspace(app);
+
+      detailEl.innerHTML = `
+        <div class="detail-grid">
+          <section class="section area-core">
+            <div class="core-header">
+              <button id="coreStatusPill" class="pill status-${app.status}" title="Open status history">${escapeHtml(getStatusLabel(app.status))} • ${fmtDate(app.statusUpdatedAt)}</button>
+              <div class="core-actions">
+                <button id="deleteAppBtn" class="btn">Delete</button>
+                <button id="openStatusBtn" class="status-trigger status-${app.status}">${app.status ? `Update status: ${escapeHtml(getStatusLabel(app.status))}` : "Set status"}</button>
+              </div>
+            </div>
+            <div class="grid-2">
+              <div class="field">
+                <label class="label">Role title</label>
+                <input id="fTitle" type="text" value="${escapeHtml(app.title)}" />
+              </div>
+              <div class="field">
+                <label class="label">Company</label>
+                <input id="fCompany" type="text" value="${escapeHtml(app.company)}" />
+              </div>
+              <div class="field">
+                <label class="label">Location</label>
+                <input id="fLocation" type="text" value="${escapeHtml(app.location || "")}" />
+              </div>
+              <div class="field">
+                <label class="label">Work mode</label>
+                <select id="fMode">${MODES.map((m) => `<option ${m === app.workMode ? "selected" : ""}>${m}</option>`).join("")}</select>
+              </div>
+            </div>
+          </section>
+
+          <section class="section area-workspace">
+            <div class="section-title">Application workspace</div>
+            <p class="workspace-copy">
+              Drag and drop files created during your application (resumes, tailored cover letters, notes, screenshots).
+              Files stay local to this tracker view.
+            </p>
+            <div class="drop-zone" id="workspaceDrop">
+              <div>Drop files here or click to select</div>
+              <div style="font-size:0.74rem; margin-top:0.2rem;">No external upload implemented</div>
+              <input id="workspaceFileInput" type="file" multiple style="display:none;" />
+              <div class="workspace-files" id="workspaceFiles"></div>
+            </div>
+          </section>
+
+          <section class="section area-insights">
+            <div class="section-title">Insights</div>
+            <div class="insights-tabs">
+              <button id="insTabQuick" class="insights-tab ${app.insightsView === "quick" ? "active" : ""}">Quick insights</button>
+              <button id="insTabIntake" class="insights-tab ${app.insightsView === "intake" ? "active" : ""}">Job intake</button>
+            </div>
+            <div id="insQuickView" style="${app.insightsView === "intake" ? "display:none;" : ""}">
+              <p class="workspace-copy" style="margin-bottom:0.2rem;">Insights populate from pasted job description in Job intake.</p>
+              ${app.insightsGeneratedAt ? `<div class="freshness">Generated from pasted text • ${escapeHtml(fmtDate(app.insightsGeneratedAt))}</div>` : `<div class="freshness">No generated insights yet.</div>`}
+              <div class="insights-grid">
+                <div class="insight-card">
+                  <strong>Job summary</strong>
+                  <div class="insight-text" id="insSummary">${escapeHtml(app.insights.summary || "Paste a job post and click Extract fields to generate a quick summary.")}</div>
+                </div>
+                <div class="insight-card">
+                  <strong>Key requirements</strong>
+                  <div class="insight-text" id="insReq">${escapeHtml(app.insights.requirements || "Requirements will appear from parsed content.")}</div>
+                </div>
+                <div class="insight-card">
+                  <strong>Comp & signals</strong>
+                  <div class="insight-text" id="insComp">${escapeHtml(app.insights.compSignals || "Compensation and signal details will appear here.")}</div>
+                </div>
+                <div class="insight-card">
+                  <strong>Fit summary</strong>
+                  <div class="insight-text" id="insFit">${escapeHtml(app.insights.fit || "Fit summary will be generated after parsing.")}</div>
+                </div>
+              </div>
+            </div>
+            <div id="insIntakeView" style="${app.insightsView === "intake" ? "" : "display:none;"}">
+              <p class="workspace-copy">Paste a full job description or recruiter text to auto-fill fields and generate insights.</p>
+              <div class="intake-url-row">
+                <input id="intakeUrlInput" type="url" placeholder="Paste posting URL (optional)" value="${escapeHtml(app.intakeUrl || "")}" />
+                <button id="fetchIntakeUrlBtn" class="btn">Fetch URL text</button>
+              </div>
+              <textarea id="intakeInput" placeholder="Paste job posting text, requirements, compensation details, and links...">${escapeHtml(app.intakeText || "")}</textarea>
+              <div class="intake-actions">
+                <button id="extractIntakeBtn" class="btn primary">Extract fields</button>
+                <button id="applyIntakeBtn" class="btn">Apply to form</button>
+                <button id="clearIntakeBtn" class="btn">Clear</button>
+              </div>
+              <div class="preview" id="intakePreview">${renderIntakePreview(app.intakePreview)}</div>
+            </div>
+          </section>
+
+          <section class="section area-note">
+            <div class="section-title">Sticky note</div>
+            <textarea id="noteInput" placeholder="Use this space to jot down quick thoughts for ${escapeHtml(app.title)} at ${escapeHtml(app.company)}">${escapeHtml(app.note || "")}</textarea>
+          </section>
+
+          <section class="section area-links">
+            <div class="section-title">Links & dates</div>
+            <div class="grid-2">
+              <div class="field">
+                <label class="label">Job URL</label>
+                <input id="fJobUrl" type="url" value="${escapeHtml(app.jobUrl || "")}" />
+              </div>
+              <div class="field">
+                <label class="label">Application URL</label>
+                <input id="fAppUrl" type="url" value="${escapeHtml(app.applicationUrl || "")}" />
+              </div>
+              <div class="field">
+                <label class="label">Applied date</label>
+                <input id="fAppliedAt" type="date" value="${escapeHtml(app.appliedAt || "")}" />
+              </div>
+              <div class="field">
+                <label class="label">Next follow-up</label>
+                <input id="fFollowUp" type="date" value="${escapeHtml(app.nextFollowUpAt || "")}" />
+              </div>
+            </div>
+          </section>
+        </div>
+      `;
+
+      const bindText = (id, key) => {
+        const el = document.getElementById(id);
+        el.addEventListener("input", () => updateField(app, key, el.value));
+      };
+      bindText("fCompany", "company");
+      bindText("fTitle", "title");
+      bindText("fLocation", "location");
+      bindText("fJobUrl", "jobUrl");
+      bindText("fAppUrl", "applicationUrl");
+
+      document.getElementById("fMode").addEventListener("change", (e) => updateField(app, "workMode", e.target.value));
+      const appliedInput = document.getElementById("fAppliedAt");
+      const followUpInput = document.getElementById("fFollowUp");
+      // TODO: Investigate a durable strategy for browser/extension autofill on date inputs.
+
+      appliedInput.addEventListener("change", (e) => {
+        const value = e.target.value;
+        if (!value) {
+          updateField(app, "appliedAt", "");
+          return;
+        }
+        app.appliedAt = value;
+        if (app.status !== "applied") {
+          setStatus(app, "applied", { preserveAppliedDate: true });
+          return;
+        }
+        app.updatedAt = nowIso();
+        persist();
+        renderList();
+      });
+      followUpInput.addEventListener("change", (e) => updateField(app, "nextFollowUpAt", e.target.value));
+
+      document.getElementById("openStatusBtn").addEventListener("click", () => openStatusDialog(app.id, "update"));
+      document.getElementById("coreStatusPill").addEventListener("click", () => openStatusDialog(app.id, "history"));
+
+      document.getElementById("noteInput").addEventListener("input", (e) => updateField(app, "note", e.target.value));
+
+      const insTabQuick = document.getElementById("insTabQuick");
+      const insTabIntake = document.getElementById("insTabIntake");
+      const insQuickView = document.getElementById("insQuickView");
+      const insIntakeView = document.getElementById("insIntakeView");
+
+      function setInsightsView(nextView) {
+        if (nextView !== "quick" && nextView !== "intake") return;
+        app.insightsView = nextView;
+        app.updatedAt = nowIso();
+        persist();
+        const quickActive = nextView === "quick";
+        insQuickView.style.display = quickActive ? "" : "none";
+        insIntakeView.style.display = quickActive ? "none" : "";
+        insTabQuick.classList.toggle("active", quickActive);
+        insTabIntake.classList.toggle("active", !quickActive);
+      }
+
+      insTabQuick.addEventListener("click", () => setInsightsView("quick"));
+      insTabIntake.addEventListener("click", () => setInsightsView("intake"));
+
+      const drop = document.getElementById("workspaceDrop");
+      const fileInput = document.getElementById("workspaceFileInput");
+      const filesEl = document.getElementById("workspaceFiles");
+
+      function renderWorkspaceFiles() {
+        filesEl.innerHTML = app.workspaceFiles
+          .map((name) => `<span class="file-pill">📄 ${escapeHtml(name)}</span>`)
+          .join("");
+      }
+
+      function addWorkspaceFiles(fileList) {
+        for (const file of fileList) {
+          app.workspaceFiles.push(file.name);
+        }
+        app.updatedAt = nowIso();
+        persist();
+        renderWorkspaceFiles();
+      }
+
+      renderWorkspaceFiles();
+
+      drop.addEventListener("click", () => fileInput.click());
+      fileInput.addEventListener("change", (e) => {
+        if (e.target.files) addWorkspaceFiles(e.target.files);
+      });
+
+      ["dragenter", "dragover"].forEach((evt) => {
+        drop.addEventListener(evt, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          drop.classList.add("highlight");
+        });
+      });
+
+      ["dragleave", "drop"].forEach((evt) => {
+        drop.addEventListener(evt, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          drop.classList.remove("highlight");
+        });
+      });
+
+      drop.addEventListener("drop", (e) => {
+        if (e.dataTransfer?.files) addWorkspaceFiles(e.dataTransfer.files);
+      });
+
+      const intakeInput = document.getElementById("intakeInput");
+      const intakeUrlInput = document.getElementById("intakeUrlInput");
+      const fetchIntakeUrlBtn = document.getElementById("fetchIntakeUrlBtn");
+      const intakePreview = document.getElementById("intakePreview");
+
+      if (state.pendingIntakeFocusId === app.id) {
+        state.pendingIntakeFocusId = null;
+        const target = intakeUrlInput.value.trim() ? intakeInput : intakeUrlInput;
+        requestAnimationFrame(() => target.focus());
+      }
+
+      intakeInput.addEventListener("input", () => {
+        app.intakeText = intakeInput.value;
+        app.updatedAt = nowIso();
+        persist();
+      });
+
+      intakeUrlInput.addEventListener("input", () => {
+        app.intakeUrl = intakeUrlInput.value.trim();
+        app.updatedAt = nowIso();
+        persist();
+      });
+
+      fetchIntakeUrlBtn.addEventListener("click", async () => {
+        const url = intakeUrlInput.value.trim();
+        if (!url) {
+          showToast("Add a URL first.", "warn");
+          return;
+        }
+        fetchIntakeUrlBtn.disabled = true;
+        const previous = fetchIntakeUrlBtn.textContent;
+        fetchIntakeUrlBtn.textContent = "Fetching...";
+        try {
+          const text = await fetchJobTextFromUrl(url);
+          if (!text) {
+            showToast("Could not extract readable text from this URL.", "error");
+            return;
+          }
+          const prefix = `Source URL: ${url}\n\n`;
+          app.intakeText = `${prefix}${text}`.slice(0, 14000);
+          app.updatedAt = nowIso();
+          persist();
+          intakeInput.value = app.intakeText;
+          showToast("Job text fetched from URL.", "success");
+        } catch (err) {
+          showToast(`Fetch failed (${err.message}). Site may block CORS.`, "error");
+        } finally {
+          fetchIntakeUrlBtn.disabled = false;
+          fetchIntakeUrlBtn.textContent = previous;
+        }
+      });
+
+      document.getElementById("extractIntakeBtn").addEventListener("click", () => {
+        const parsed = parseIntakeText(intakeInput.value);
+        if (!parsed) {
+          showToast("Paste job details first.", "warn");
+          return;
+        }
+        app.intakePreview = parsed;
+        app.insights = { ...EMPTY_INSIGHTS, ...parsed.insights };
+        app.insightsGeneratedAt = parsed.extractedAt || nowIso();
+        app.updatedAt = nowIso();
+        persist();
+        renderDetail();
+        showToast("Fields extracted. Review and apply.", "success");
+      });
+
+      document.getElementById("applyIntakeBtn").addEventListener("click", () => {
+        if (!app.intakePreview) {
+          showToast("Extract fields first.", "warn");
+          return;
+        }
+        const p = app.intakePreview;
+        const applyTitle = document.getElementById("applyTitle")?.checked;
+        const applyCompany = document.getElementById("applyCompany")?.checked;
+        const applyLocation = document.getElementById("applyLocation")?.checked;
+        const applyWorkMode = document.getElementById("applyWorkMode")?.checked;
+        const applyInsights = document.getElementById("applyInsights")?.checked;
+        if (applyTitle && p.title) app.title = p.title;
+        if (applyCompany && p.company) app.company = p.company;
+        if (applyLocation && p.location) app.location = p.location;
+        if (applyWorkMode && p.workMode && p.workMode !== "Unknown") app.workMode = p.workMode;
+        if (applyInsights) {
+          app.insights = { ...EMPTY_INSIGHTS, ...p.insights };
+          app.insightsGeneratedAt = p.extractedAt || nowIso();
+        }
+        app.updatedAt = nowIso();
+        persist();
+        render();
+        showToast("Selected fields applied.", "success");
+      });
+
+      document.getElementById("clearIntakeBtn").addEventListener("click", () => {
+        app.intakeText = "";
+        app.intakeUrl = "";
+        app.intakePreview = null;
+        app.updatedAt = nowIso();
+        persist();
+        intakeInput.value = "";
+        intakeUrlInput.value = "";
+        intakePreview.innerHTML = renderIntakePreview(null);
+        showToast("Intake content cleared.");
+      });
+
+      document.getElementById("deleteAppBtn").addEventListener("click", () => {
+        const confirmed = window.confirm("Delete this application?");
+        if (!confirmed) return;
+        const idx = state.apps.findIndex((a) => a.id === app.id);
+        if (idx >= 0) state.apps.splice(idx, 1);
+        state.activeId = filteredApps()[0]?.id || state.apps[0]?.id || null;
+        persist();
+        render();
+        showToast("Application deleted.", "warn");
+      });
+    }
+
+    function render() {
+      renderFilters();
+      renderList();
+      renderDetail();
+    }
+
+    function setNewDialogMode(mode) {
+      state.newDialogMode = mode === "manual" ? "manual" : "post";
+      const manual = state.newDialogMode === "manual";
+      newTabManual.classList.toggle("active", manual);
+      newTabPost.classList.toggle("active", !manual);
+      newPanelManual.classList.toggle("active", manual);
+      newPanelPost.classList.toggle("active", !manual);
+      newCreate.textContent = manual ? "Create" : "Create from post";
+    }
+
+    function openNewDialog() {
+      newCompany.value = "";
+      newTitle.value = "";
+      newLocation.value = "";
+      newMode.value = "Unknown";
+      newPostUrl.value = "";
+      newPostText.value = "";
+      setNewDialogMode("post");
+      newDialog.classList.add("open");
+      newPostUrl.focus();
+    }
+
+    function closeNewDialog() {
+      newDialog.classList.remove("open");
+    }
+
+    async function createFromDialog() {
+      if (state.newDialogMode === "manual") {
+        const company = newCompany.value.trim();
+        const title = newTitle.value.trim();
+        if (!company || !title) {
+          showToast("Company and role title are required.", "warn");
+          return;
+        }
+        const app = createApp({
+          company,
+          title,
+          location: newLocation.value.trim(),
+          workMode: newMode.value,
+        });
+        app.insightsView = "intake";
+        state.apps.unshift(app);
+        state.activeId = app.id;
+        state.pendingIntakeFocusId = app.id;
+        persist();
+        closeNewDialog();
+        render();
+        showToast("Application created.", "success");
+        return;
+      }
+
+      const sourceUrl = newPostUrl.value.trim();
+      let sourceText = newPostText.value.trim();
+      if (!sourceText && sourceUrl) {
+        newCreate.disabled = true;
+        const prev = newCreate.textContent;
+        newCreate.textContent = "Fetching...";
+        try {
+          sourceText = await fetchJobTextFromUrl(sourceUrl);
+        } catch (err) {
+          showToast(`Could not fetch URL (${err.message}). Paste text instead.`, "error");
+        } finally {
+          newCreate.disabled = false;
+          newCreate.textContent = state.newDialogMode === "manual" ? "Create" : "Create from post";
+        }
+      }
+
+      if (!sourceText && !sourceUrl) {
+        showToast("Add job URL or pasted job description.", "warn");
+        return;
+      }
+
+      const parsed = parseIntakeText(sourceText || sourceUrl);
+      const app = createApp({
+        company: parsed?.company || "Unknown company",
+        title: parsed?.title || "New role",
+        location: parsed?.location || "",
+        workMode: parsed?.workMode || "Unknown",
+      });
+      app.intakeUrl = sourceUrl;
+      app.intakeText = sourceText;
+      app.intakePreview = parsed;
+      app.insightsView = "intake";
+      if (parsed?.insights) {
+        app.insights = { ...EMPTY_INSIGHTS, ...parsed.insights };
+        app.insightsGeneratedAt = parsed.extractedAt || nowIso();
+      }
+
+      state.apps.unshift(app);
+      state.activeId = app.id;
+      state.pendingIntakeFocusId = app.id;
+      persist();
+      closeNewDialog();
+      render();
+      showToast("Application created from job post.", "success");
+    }
+
+    function exportTrackerData() {
+      const payload = {
+        exportedAt: nowIso(),
+        version: 1,
+        theme: state.theme,
+        activeId: state.activeId,
+        apps: state.apps,
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `careersentry-tracker-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast("Tracker exported.", "success");
+    }
+
+    function importTrackerData(raw) {
+      let parsed;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        showToast("Invalid JSON file.", "error");
+        return;
+      }
+      const apps = Array.isArray(parsed?.apps) ? parsed.apps : Array.isArray(parsed) ? parsed : null;
+      if (!apps) {
+        showToast("No applications found in import.", "error");
+        return;
+      }
+      state.apps = apps.map((app) => {
+        const base = createApp({
+          company: app.company || "Company",
+          title: app.title || "Role",
+          location: app.location || "",
+          workMode: app.workMode || "Unknown",
+        });
+        return { ...base, ...app };
+      });
+      state.activeId = state.apps[0]?.id || null;
+      if (parsed?.theme === "light" || parsed?.theme === "dark") {
+        state.theme = parsed.theme;
+        document.body.classList.toggle("theme-light", state.theme === "light");
+        syncThemeLabel();
+      }
+      persist();
+      render();
+      showToast("Tracker imported.", "success");
+    }
+
+    function setupColumnResizer() {
+      if (!colResizer || !layoutEl) return;
+      let dragging = false;
+
+      function applyWidth(px) {
+        const clamped = Math.max(LEFT_PANEL_MIN, Math.min(LEFT_PANEL_MAX, px));
+        document.documentElement.style.setProperty("--left-panel-width", `${clamped}px`);
+        localStorage.setItem("careersentry-left-width", String(clamped));
+      }
+
+      colResizer.addEventListener("dblclick", () => {
+        document.documentElement.style.setProperty("--left-panel-width", `${LEFT_PANEL_DEFAULT}px`);
+        localStorage.setItem("careersentry-left-width", String(LEFT_PANEL_DEFAULT));
+      });
+
+      colResizer.addEventListener("mousedown", (e) => {
+        if (window.matchMedia("(max-width: 980px)").matches) return;
+        e.preventDefault();
+        dragging = true;
+        colResizer.classList.add("dragging");
+      });
+
+      document.addEventListener("mousemove", (e) => {
+        if (!dragging) return;
+        const rect = layoutEl.getBoundingClientRect();
+        applyWidth(e.clientX - rect.left);
+      });
+
+      document.addEventListener("mouseup", () => {
+        if (!dragging) return;
+        dragging = false;
+        colResizer.classList.remove("dragging");
+      });
+    }
+
+    searchInput.addEventListener("input", (e) => {
+      state.search = e.target.value;
+      render();
+    });
+
+    sortSelect.addEventListener("change", (e) => {
+      state.sortBy = e.target.value;
+      render();
+    });
+
+    statusFilter.addEventListener("change", (e) => {
+      state.statusFilter = e.target.value;
+      filtersMenu.classList.remove("open");
+      render();
+    });
+
+    modeFilter.addEventListener("change", (e) => {
+      state.modeFilter = e.target.value;
+      filtersMenu.classList.remove("open");
+      render();
+    });
+
+    themeToggle.addEventListener("click", () => {
+      state.theme = state.theme === "light" ? "dark" : "light";
+      document.body.classList.toggle("theme-light", state.theme === "light");
+      syncThemeLabel();
+      persist();
+    });
+
+    dataBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      filtersMenu.classList.remove("open");
+      dataMenu.classList.toggle("open");
+    });
+
+    filtersBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      dataMenu.classList.remove("open");
+      filtersMenu.classList.toggle("open");
+    });
+
+    resetFiltersBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      state.statusFilter = "all";
+      state.modeFilter = "all";
+      filtersMenu.classList.remove("open");
+      render();
+      showToast("Filters reset.");
+    });
+
+    exportBtn.addEventListener("click", () => {
+      dataMenu.classList.remove("open");
+      exportTrackerData();
+    });
+    importBtn.addEventListener("click", () => {
+      dataMenu.classList.remove("open");
+      importInput.click();
+    });
+    importInput.addEventListener("change", async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const raw = await file.text();
+      importTrackerData(raw);
+      importInput.value = "";
+    });
+
+    newBtn.addEventListener("click", openNewDialog);
+    newCancel.addEventListener("click", closeNewDialog);
+    newCreate.addEventListener("click", createFromDialog);
+    newTabPost.addEventListener("click", () => setNewDialogMode("post"));
+    newTabManual.addEventListener("click", () => setNewDialogMode("manual"));
+
+    newDialog.addEventListener("click", (e) => {
+      if (e.target === newDialog) closeNewDialog();
+    });
+
+    newDialog.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && e.target.tagName !== "TEXTAREA") {
+        e.preventDefault();
+        createFromDialog();
+      }
+    });
+
+    statusTabUpdate.addEventListener("click", () => setStatusDialogView("update"));
+    statusTabHistory.addEventListener("click", () => {
+      const app = state.apps.find((a) => a.id === statusDialogAppId);
+      if (app) renderStatusHistory(app);
+      setStatusDialogView("history");
+    });
+
+    clearStatusHistoryBtn.addEventListener("click", () => {
+      const app = state.apps.find((a) => a.id === statusDialogAppId);
+      if (!app) return;
+      const ok = window.confirm("Clear this application's status history?");
+      if (!ok) return;
+      const at = app.statusUpdatedAt || nowIso();
+      app.statusHistory = [{ status: app.status, at }];
+      app.updatedAt = nowIso();
+      persist();
+      renderStatusHistory(app);
+      renderList();
+      showToast("Status history cleared.", "warn");
+    });
+
+    statusDialog.addEventListener("click", (e) => {
+      if (e.target === statusDialog) {
+        closeStatusDialog();
+        return;
+      }
+      const actionBtn = e.target.closest("[data-status-action]");
+      const action = actionBtn?.dataset?.statusAction;
+      if (!action) return;
+      if (action === "cancel") {
+        closeStatusDialog();
+        return;
+      }
+      const app = state.apps.find((a) => a.id === statusDialogAppId);
+      if (!app) {
+        closeStatusDialog();
+        return;
+      }
+      setStatus(app, action);
+      closeStatusDialog();
+    });
+
+    function closeHeaderMenus() {
+      dataMenu.classList.remove("open");
+      filtersMenu.classList.remove("open");
+    }
+
+    document.addEventListener("pointerdown", (e) => {
+      const inData = e.target.closest("#dataBtn, #dataMenu");
+      const inFilters = e.target.closest("#filtersBtn, #filtersMenu");
+      if (!inData) dataMenu.classList.remove("open");
+      if (!inFilters) filtersMenu.classList.remove("open");
+    }, true);
+
+    topBar.addEventListener("click", (e) => {
+      const inData = e.target.closest("#dataBtn, #dataMenu");
+      const inFilters = e.target.closest("#filtersBtn, #filtersMenu");
+      if (!inData) dataMenu.classList.remove("open");
+      if (!inFilters) filtersMenu.classList.remove("open");
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      dataMenu.classList.remove("open");
+      filtersMenu.classList.remove("open");
+      closeStatusDialog();
+      closeNewDialog();
+    });
+
+    hydrate();
+    setupColumnResizer();
+    render();
+  </script>
+</body>
+</html>
