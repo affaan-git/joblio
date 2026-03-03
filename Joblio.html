@@ -528,63 +528,7 @@
 
     .intake-actions {
       display: flex;
-      gap: 0.45rem;
-      flex-wrap: wrap;
-    }
-
-    .preview {
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      background: var(--bg-panel);
-      padding: 0.55rem;
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      display: grid;
-      gap: 0.32rem;
-    }
-
-    .preview strong {
-      color: var(--text);
-    }
-
-    .confidence {
-      display: inline-block;
-      margin-left: 0.25rem;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      padding: 0.02rem 0.4rem;
-      font-size: 0.69rem;
-      text-transform: uppercase;
-      letter-spacing: 0.02em;
-    }
-
-    .confidence.high {
-      color: var(--success);
-      border-color: var(--success);
-      background: rgba(34, 197, 94, 0.12);
-    }
-
-    .confidence.medium {
-      color: var(--warn);
-      border-color: var(--warn);
-      background: rgba(245, 158, 11, 0.12);
-    }
-
-    .confidence.low {
-      color: var(--text-muted);
-      border-color: var(--border);
-      background: var(--bg-elevated);
-    }
-
-    .preview-row {
-      display: grid;
-      grid-template-columns: auto 1fr;
-      align-items: center;
-      gap: 0.35rem;
-    }
-
-    .preview-row input[type="checkbox"] {
-      accent-color: var(--primary);
+      justify-content: flex-end;
     }
 
     .core-header {
@@ -1099,7 +1043,6 @@
         note: "",
         workspaceFiles: [],
         intakeText: "",
-        intakePreview: null,
         createdAt: t,
         updatedAt: t,
       };
@@ -1314,9 +1257,6 @@
       if (typeof app.intakeText !== "string") {
         app.intakeText = "";
       }
-      if (!("intakePreview" in app)) {
-        app.intakePreview = null;
-      }
       normalizeStatusHistory(app);
     }
 
@@ -1326,44 +1266,6 @@
       if (/\bremote\b/.test(s)) return "Remote";
       if (/\bon[-\s]?site\b|\bin office\b/.test(s)) return "On-site";
       return "Unknown";
-    }
-
-    function parseIntakeText(text) {
-      const clean = text.trim();
-      if (!clean) return null;
-      const lines = clean.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-      const lineBlob = lines.join(" ");
-
-      const titleMatch = clean.match(/(?:Role|Title|Position)\s*:\s*([^\n]+)/i);
-      const companyMatch = clean.match(/Company\s*:\s*([^\n]+)/i);
-      const locationMatch = clean.match(/Location\s*:\s*([^\n]+)/i);
-      const confidence = {
-        title: titleMatch ? "high" : lines[0] ? "medium" : "low",
-        company: companyMatch ? "high" : /\binc\b|\bllc\b|\bcorp\b|\bcompany\b/i.test(clean) ? "medium" : "low",
-        location: locationMatch ? "high" : /\b(remote|hybrid|on-site|tx|ca|ny)\b/i.test(clean) ? "medium" : "low",
-        workMode: /\bhybrid\b|\bremote\b|\bon[-\s]?site\b|\bin office\b/i.test(clean) ? "high" : "low",
-      };
-
-      return {
-        title: (titleMatch?.[1] || lines[0] || "").trim(),
-        company: (companyMatch?.[1] || "").trim(),
-        location: (locationMatch?.[1] || "").trim(),
-        workMode: deriveWorkMode(clean),
-        confidence,
-        extractedAt: nowIso(),
-      };
-    }
-
-    function renderIntakePreview(preview) {
-      if (!preview) {
-        return "No parsed data yet. Paste a posting and click Extract fields.";
-      }
-      return [
-        `<label class="preview-row"><input type="checkbox" id="applyTitle" ${preview.title ? "checked" : ""} /><span><strong>Role:</strong> ${escapeHtml(preview.title || "Not detected")} <span class="confidence ${preview.confidence?.title || "low"}">${escapeHtml(preview.confidence?.title || "low")}</span></span></label>`,
-        `<label class="preview-row"><input type="checkbox" id="applyCompany" ${preview.company ? "checked" : ""} /><span><strong>Company:</strong> ${escapeHtml(preview.company || "Not detected")} <span class="confidence ${preview.confidence?.company || "low"}">${escapeHtml(preview.confidence?.company || "low")}</span></span></label>`,
-        `<label class="preview-row"><input type="checkbox" id="applyLocation" ${preview.location ? "checked" : ""} /><span><strong>Location:</strong> ${escapeHtml(preview.location || "Not detected")} <span class="confidence ${preview.confidence?.location || "low"}">${escapeHtml(preview.confidence?.location || "low")}</span></span></label>`,
-        `<label class="preview-row"><input type="checkbox" id="applyWorkMode" ${preview.workMode && preview.workMode !== "Unknown" ? "checked" : ""} /><span><strong>Work mode:</strong> ${escapeHtml(preview.workMode || "Unknown")} <span class="confidence ${preview.confidence?.workMode || "low"}">${escapeHtml(preview.confidence?.workMode || "low")}</span></span></label>`,
-      ].join("");
     }
 
     function renderStatusHistory(app) {
@@ -1457,14 +1359,11 @@
 
           <section class="section area-intake">
             <div class="section-title">Job intake</div>
-            <p class="workspace-copy">Paste full job description text to extract and apply fields faster.</p>
+            <p class="workspace-copy">Paste full job description text for reference while you complete the application.</p>
             <textarea id="intakeInput" placeholder="Paste job posting text, requirements, compensation details, and links...">${escapeHtml(app.intakeText || "")}</textarea>
             <div class="intake-actions">
-              <button id="extractIntakeBtn" class="btn primary">Extract fields</button>
-              <button id="applyIntakeBtn" class="btn">Apply to form</button>
               <button id="clearIntakeBtn" class="btn">Clear</button>
             </div>
-            <div class="preview" id="intakePreview">${renderIntakePreview(app.intakePreview)}</div>
           </section>
 
           <section class="section area-note">
@@ -1578,7 +1477,6 @@
       });
 
       const intakeInput = document.getElementById("intakeInput");
-      const intakePreview = document.getElementById("intakePreview");
 
       if (state.pendingIntakeFocusId === app.id) {
         state.pendingIntakeFocusId = null;
@@ -1591,46 +1489,11 @@
         persist();
       });
 
-      document.getElementById("extractIntakeBtn").addEventListener("click", () => {
-        const parsed = parseIntakeText(intakeInput.value);
-        if (!parsed) {
-          showToast("Paste job details first.", "warn");
-          return;
-        }
-        app.intakePreview = parsed;
-        app.updatedAt = nowIso();
-        persist();
-        renderDetail();
-        showToast("Fields extracted. Review and apply.", "success");
-      });
-
-      document.getElementById("applyIntakeBtn").addEventListener("click", () => {
-        if (!app.intakePreview) {
-          showToast("Extract fields first.", "warn");
-          return;
-        }
-        const p = app.intakePreview;
-        const applyTitle = document.getElementById("applyTitle")?.checked;
-        const applyCompany = document.getElementById("applyCompany")?.checked;
-        const applyLocation = document.getElementById("applyLocation")?.checked;
-        const applyWorkMode = document.getElementById("applyWorkMode")?.checked;
-        if (applyTitle && p.title) app.title = p.title;
-        if (applyCompany && p.company) app.company = p.company;
-        if (applyLocation && p.location) app.location = p.location;
-        if (applyWorkMode && p.workMode && p.workMode !== "Unknown") app.workMode = p.workMode;
-        app.updatedAt = nowIso();
-        persist();
-        render();
-        showToast("Selected fields applied.", "success");
-      });
-
       document.getElementById("clearIntakeBtn").addEventListener("click", () => {
         app.intakeText = "";
-        app.intakePreview = null;
         app.updatedAt = nowIso();
         persist();
         intakeInput.value = "";
-        intakePreview.innerHTML = renderIntakePreview(null);
         showToast("Intake content cleared.");
       });
 
@@ -1707,15 +1570,13 @@
         return;
       }
 
-      const parsed = parseIntakeText(sourceText);
       const app = createApp({
-        company: parsed?.company || "Unknown company",
-        title: parsed?.title || "New role",
-        location: parsed?.location || "",
-        workMode: parsed?.workMode || "Unknown",
+        company: "Unknown company",
+        title: "New role",
+        location: "",
+        workMode: "Unknown",
       });
       app.intakeText = sourceText;
-      app.intakePreview = parsed;
 
       state.apps.unshift(app);
       state.activeId = app.id;
