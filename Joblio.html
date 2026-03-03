@@ -1296,13 +1296,12 @@
       } else {
         app.workspaceFiles = app.workspaceFiles
           .map((f) => {
-            if (typeof f === "string") return { name: f, size: null, type: "", addedAt: null };
+            if (typeof f === "string") return { name: f, size: null, type: "" };
             if (!f || typeof f !== "object") return null;
             return {
               name: typeof f.name === "string" ? f.name : "Untitled file",
               size: Number.isFinite(f.size) ? f.size : null,
               type: typeof f.type === "string" ? f.type : "",
-              addedAt: typeof f.addedAt === "string" ? f.addedAt : null,
             };
           })
           .filter(Boolean);
@@ -1311,14 +1310,6 @@
         app.intakeText = "";
       }
       normalizeStatusHistory(app);
-    }
-
-    function deriveWorkMode(text) {
-      const s = text.toLowerCase();
-      if (/\bhybrid\b/.test(s)) return "Hybrid";
-      if (/\bremote\b/.test(s)) return "Remote";
-      if (/\bon[-\s]?site\b|\bin office\b/.test(s)) return "On-site";
-      return "Unknown";
     }
 
     function formatFileSize(bytes) {
@@ -1432,8 +1423,8 @@
           </section>
 
           <section class="section area-intake">
-            <div class="section-title">Job intake</div>
-            <div class="muted-help">Paste full job description text for reference while you complete the application.</div>
+            <div class="section-title">Job description</div>
+            <div class="muted-help">Paste the full job posting text to keep with this application.</div>
             <div class="field">
               <label class="label" for="intakeInput">Description</label>
               <textarea id="intakeInput" placeholder="Paste job posting text, requirements, compensation details, and links...">${escapeHtml(app.intakeText || "")}</textarea>
@@ -1531,7 +1522,6 @@
             name: file.name,
             size: Number.isFinite(file.size) ? file.size : null,
             type: file.type || "",
-            addedAt: nowIso(),
           });
         }
         app.updatedAt = nowIso();
