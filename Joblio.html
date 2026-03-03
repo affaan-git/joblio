@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>CareerSentry Tracker</title>
+  <title>Joblio</title>
   <style>
     :root {
       --bg: #0b1018;
@@ -853,8 +853,8 @@
 <body>
   <header class="top-bar">
     <div class="brand">
-      <div class="brand-icon">CS</div>
-      <span>CareerSentry Tracker</span>
+      <div class="brand-icon">JL</div>
+      <span>Joblio</span>
     </div>
 
     <div class="center-controls">
@@ -976,7 +976,8 @@
   </div>
 
   <script>
-    const STORAGE_KEY = "careersentry-tracker-v1";
+    const STORAGE_KEY = "joblio-v1";
+    const LEFT_WIDTH_KEY = "joblio-left-width";
     const STATUS = [
       { id: "wishlist", label: "Wishlist" },
       { id: "in_progress", label: "In progress" },
@@ -1158,7 +1159,7 @@
       state.activeId = state.activeId || state.apps[0]?.id || null;
       document.body.classList.toggle("theme-light", state.theme === "light");
       syncThemeLabel();
-      const savedWidth = Number(localStorage.getItem("careersentry-left-width"));
+      const savedWidth = Number(localStorage.getItem(LEFT_WIDTH_KEY));
       if (savedWidth && Number.isFinite(savedWidth)) {
         const clamped = Math.max(LEFT_PANEL_MIN, Math.min(LEFT_PANEL_MAX, savedWidth));
         document.documentElement.style.setProperty("--left-panel-width", `${clamped}px`);
@@ -1693,7 +1694,7 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `careersentry-tracker-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `joblio-${new Date().toISOString().slice(0, 10)}.json`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -1741,12 +1742,12 @@
       function applyWidth(px) {
         const clamped = Math.max(LEFT_PANEL_MIN, Math.min(LEFT_PANEL_MAX, px));
         document.documentElement.style.setProperty("--left-panel-width", `${clamped}px`);
-        localStorage.setItem("careersentry-left-width", String(clamped));
+        localStorage.setItem(LEFT_WIDTH_KEY, String(clamped));
       }
 
       colResizer.addEventListener("dblclick", () => {
         document.documentElement.style.setProperty("--left-panel-width", `${LEFT_PANEL_DEFAULT}px`);
-        localStorage.setItem("careersentry-left-width", String(LEFT_PANEL_DEFAULT));
+        localStorage.setItem(LEFT_WIDTH_KEY, String(LEFT_PANEL_DEFAULT));
       });
 
       colResizer.addEventListener("mousedown", (e) => {
