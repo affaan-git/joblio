@@ -497,18 +497,48 @@
 
     .workspace-files {
       margin-top: 0.55rem;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.35rem;
-      justify-content: flex-start;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+      gap: 0.45rem;
+      max-height: 238px;
+      min-height: 118px;
+      overflow: auto;
+      align-content: start;
+      padding-right: 0.15rem;
     }
 
-    .file-pill {
+    .file-tile {
       border: 1px solid var(--border);
-      background: var(--bg-elevated);
+      background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+      border-radius: var(--radius-sm);
+      padding: 0.45rem 0.5rem;
+      display: grid;
+      gap: 0.2rem;
+      text-align: left;
+    }
+
+    .file-type {
+      font-size: 0.66rem;
+      line-height: 1;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
       border-radius: 999px;
-      padding: 0.16rem 0.54rem;
-      font-size: 0.75rem;
+      padding: 0.12rem 0.36rem;
+      width: fit-content;
+      letter-spacing: 0.02em;
+    }
+
+    .file-name {
+      font-size: 0.77rem;
+      color: var(--text);
+      line-height: 1.25;
+      word-break: break-word;
+      max-height: 2.5em;
+      overflow: hidden;
+    }
+
+    .file-meta {
+      font-size: 0.69rem;
       color: var(--text-muted);
     }
 
@@ -1247,6 +1277,19 @@
     function ensureAppWorkspace(app) {
       if (!Array.isArray(app.workspaceFiles)) {
         app.workspaceFiles = [];
+      } else {
+        app.workspaceFiles = app.workspaceFiles
+          .map((f) => {
+            if (typeof f === "string") return { name: f, size: null, type: "", addedAt: null };
+            if (!f || typeof f !== "object") return null;
+            return {
+              name: typeof f.name === "string" ? f.name : "Untitled file",
+              size: Number.isFinite(f.size) ? f.size : null,
+              type: typeof f.type === "string" ? f.type : "",
+              addedAt: typeof f.addedAt === "string" ? f.addedAt : null,
+            };
+          })
+          .filter(Boolean);
       }
       if (typeof app.intakeText !== "string") {
         app.intakeText = "";
@@ -1260,6 +1303,24 @@
       if (/\bremote\b/.test(s)) return "Remote";
       if (/\bon[-\s]?site\b|\bin office\b/.test(s)) return "On-site";
       return "Unknown";
+    }
+
+    function formatFileSize(bytes) {
+      if (!Number.isFinite(bytes) || bytes <= 0) return "Size unknown";
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    function getFileBadge(file) {
+      const type = (file.type || "").toLowerCase();
+      const name = (file.name || "").toLowerCase();
+      if (type.includes("pdf") || name.endsWith(".pdf")) return "PDF";
+      if (type.includes("word") || name.endsWith(".doc") || name.endsWith(".docx")) return "DOC";
+      if (type.startsWith("image/")) return "IMG";
+      if (type.includes("sheet") || name.endsWith(".xls") || name.endsWith(".xlsx") || name.endsWith(".csv")) return "SHEET";
+      if (type.startsWith("text/") || name.endsWith(".txt") || name.endsWith(".md")) return "TEXT";
+      return "FILE";
     }
 
     function renderStatusHistory(app) {
@@ -1344,8 +1405,8 @@
               Files stay local to this tracker view.
             </p>
             <div class="drop-zone" id="workspaceDrop">
-              <div>Drop files here or click to select</div>
-              <div style="font-size:0.74rem; margin-top:0.2rem;">No external upload implemented</div>
+              <div style="text-align:center;">Drop files here or click to select</div>
+              <div style="font-size:0.74rem; margin-top:0.2rem; text-align:center;">No files added</div>
               <input id="workspaceFileInput" type="file" multiple style="display:none;" />
               <div class="workspace-files" id="workspaceFiles"></div>
             </div>
@@ -1430,14 +1491,29 @@
       const filesEl = document.getElementById("workspaceFiles");
 
       function renderWorkspaceFiles() {
+        if (!app.workspaceFiles.length) {
+          filesEl.innerHTML = "";
+          return;
+        }
         filesEl.innerHTML = app.workspaceFiles
-          .map((name) => `<span class="file-pill">📄 ${escapeHtml(name)}</span>`)
+          .map((file) => `
+            <article class="file-tile" title="${escapeHtml(file.name)}">
+              <span class="file-type">${escapeHtml(getFileBadge(file))}</span>
+              <div class="file-name">${escapeHtml(file.name)}</div>
+              <div class="file-meta">${escapeHtml(formatFileSize(file.size))}</div>
+            </article>
+          `)
           .join("");
       }
 
       function addWorkspaceFiles(fileList) {
         for (const file of fileList) {
-          app.workspaceFiles.push(file.name);
+          app.workspaceFiles.push({
+            name: file.name,
+            size: Number.isFinite(file.size) ? file.size : null,
+            type: file.type || "",
+            addedAt: nowIso(),
+          });
         }
         app.updatedAt = nowIso();
         persist();
