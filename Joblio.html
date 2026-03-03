@@ -394,15 +394,15 @@
       grid-template-columns: minmax(0, 1.45fr) minmax(320px, 1fr);
       grid-template-areas:
         "core links"
-        "workspace insights"
-        "workspace insights"
-        "note insights";
+        "workspace intake"
+        "workspace intake"
+        "note intake";
       gap: 0.72rem;
     }
 
     .area-core { grid-area: core; }
     .area-workspace { grid-area: workspace; }
-    .area-insights { grid-area: insights; }
+    .area-intake { grid-area: intake; }
     .area-note { grid-area: note; }
     .area-links { grid-area: links; }
 
@@ -505,12 +505,6 @@
       flex-wrap: wrap;
     }
 
-    .insights-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0.52rem;
-    }
-
     .insights-tabs {
       display: flex;
       gap: 0.4rem;
@@ -530,30 +524,6 @@
       border-color: var(--primary);
       color: var(--primary);
       background: var(--primary-soft);
-    }
-
-    .insight-card {
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      background: var(--bg-panel);
-      padding: 0.52rem;
-      display: grid;
-      gap: 0.26rem;
-      min-height: 84px;
-    }
-
-    .insight-card strong {
-      font-size: 0.74rem;
-      color: var(--text-muted);
-      letter-spacing: 0.01em;
-    }
-
-    .insight-text {
-      font-size: 0.8rem;
-      line-height: 1.35;
-      color: var(--text);
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
     }
 
     .intake-actions {
@@ -615,17 +585,6 @@
 
     .preview-row input[type="checkbox"] {
       accent-color: var(--primary);
-    }
-
-    .intake-url-row {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 0.4rem;
-    }
-
-    .freshness {
-      color: var(--text-muted);
-      font-size: 0.74rem;
     }
 
     .core-header {
@@ -832,11 +791,10 @@
         grid-template-areas:
           "core"
           "workspace"
-          "insights"
+          "intake"
           "note"
           "links";
       }
-      .insights-grid { grid-template-columns: 1fr; }
     }
 
     @media (max-width: 760px) {
@@ -928,13 +886,9 @@
       </div>
 
       <div id="newPanelPost" class="create-panel active">
-        <p class="muted-help">Paste a job URL and/or description to create quickly. Company and role can be inferred.</p>
+        <p class="muted-help">Paste job description text to create quickly. Company and role can be inferred.</p>
         <div class="field">
-          <label class="label" for="newPostUrl">Job URL (optional)</label>
-          <input id="newPostUrl" type="url" placeholder="https://..." />
-        </div>
-        <div class="field">
-          <label class="label" for="newPostText">Job description text (optional if URL is provided)</label>
+          <label class="label" for="newPostText">Job description text</label>
           <textarea id="newPostText" placeholder="Paste the job posting text here..."></textarea>
         </div>
       </div>
@@ -1008,13 +962,6 @@
       { id: "closed", label: "Closed" },
     ];
     const MODES = ["Unknown", "On-site", "Hybrid", "Remote"];
-    const EMPTY_INSIGHTS = {
-      summary: "",
-      requirements: "",
-      compSignals: "",
-      fit: "",
-    };
-
     const state = {
       apps: [],
       activeId: null,
@@ -1057,7 +1004,6 @@
     const newTabManual = document.getElementById("newTabManual");
     const newPanelPost = document.getElementById("newPanelPost");
     const newPanelManual = document.getElementById("newPanelManual");
-    const newPostUrl = document.getElementById("newPostUrl");
     const newPostText = document.getElementById("newPostText");
     const newCompany = document.getElementById("newCompany");
     const newTitle = document.getElementById("newTitle");
@@ -1153,11 +1099,7 @@
         note: "",
         workspaceFiles: [],
         intakeText: "",
-        intakeUrl: "",
         intakePreview: null,
-        insightsView: "quick",
-        insights: { ...EMPTY_INSIGHTS },
-        insightsGeneratedAt: null,
         createdAt: t,
         updatedAt: t,
       };
@@ -1369,23 +1311,11 @@
       if (!Array.isArray(app.workspaceFiles)) {
         app.workspaceFiles = [];
       }
-      if (!app.insights || typeof app.insights !== "object") {
-        app.insights = { ...EMPTY_INSIGHTS };
-      }
       if (typeof app.intakeText !== "string") {
         app.intakeText = "";
       }
-      if (typeof app.intakeUrl !== "string") {
-        app.intakeUrl = "";
-      }
       if (!("intakePreview" in app)) {
         app.intakePreview = null;
-      }
-      if (app.insightsView !== "quick" && app.insightsView !== "intake") {
-        app.insightsView = "quick";
-      }
-      if (!app.insightsGeneratedAt) {
-        app.insightsGeneratedAt = null;
       }
       normalizeStatusHistory(app);
     }
@@ -1407,19 +1337,6 @@
       const titleMatch = clean.match(/(?:Role|Title|Position)\s*:\s*([^\n]+)/i);
       const companyMatch = clean.match(/Company\s*:\s*([^\n]+)/i);
       const locationMatch = clean.match(/Location\s*:\s*([^\n]+)/i);
-      const compensationMatch = clean.match(/(\$[\d,.kK]+\s*(?:-|to)\s*\$[\d,.kK]+|\$[\d,.kK]+\+?)/);
-
-      const bullets = lines.filter((line) => /^[-*•]/.test(line)).slice(0, 6);
-      const requirements = bullets.length
-        ? bullets.map((b) => b.replace(/^[-*•]\s*/, "")).join("\n")
-        : lines.filter((line) => /required|experience|proficient|must|years?/i.test(line)).slice(0, 4).join("\n");
-
-      const sentenceParts = lineBlob.split(/(?<=[.!?])\s+/).filter(Boolean);
-      const summary = sentenceParts.slice(0, 2).join(" ").slice(0, 280);
-      const fit = requirements
-        ? "Compare your resume to the extracted requirements and prioritize direct keyword matches."
-        : "Paste a fuller posting to generate stronger fit guidance.";
-
       const confidence = {
         title: titleMatch ? "high" : lines[0] ? "medium" : "low",
         company: companyMatch ? "high" : /\binc\b|\bllc\b|\bcorp\b|\bcompany\b/i.test(clean) ? "medium" : "low",
@@ -1434,12 +1351,6 @@
         workMode: deriveWorkMode(clean),
         confidence,
         extractedAt: nowIso(),
-        insights: {
-          summary: summary || "Summary will appear after parsing a fuller posting.",
-          requirements: requirements || "Key requirements were not confidently detected.",
-          compSignals: compensationMatch ? `Detected compensation signal: ${compensationMatch[1]}` : "No explicit compensation text detected.",
-          fit,
-        },
       };
     }
 
@@ -1452,7 +1363,6 @@
         `<label class="preview-row"><input type="checkbox" id="applyCompany" ${preview.company ? "checked" : ""} /><span><strong>Company:</strong> ${escapeHtml(preview.company || "Not detected")} <span class="confidence ${preview.confidence?.company || "low"}">${escapeHtml(preview.confidence?.company || "low")}</span></span></label>`,
         `<label class="preview-row"><input type="checkbox" id="applyLocation" ${preview.location ? "checked" : ""} /><span><strong>Location:</strong> ${escapeHtml(preview.location || "Not detected")} <span class="confidence ${preview.confidence?.location || "low"}">${escapeHtml(preview.confidence?.location || "low")}</span></span></label>`,
         `<label class="preview-row"><input type="checkbox" id="applyWorkMode" ${preview.workMode && preview.workMode !== "Unknown" ? "checked" : ""} /><span><strong>Work mode:</strong> ${escapeHtml(preview.workMode || "Unknown")} <span class="confidence ${preview.confidence?.workMode || "low"}">${escapeHtml(preview.confidence?.workMode || "low")}</span></span></label>`,
-        `<label class="preview-row"><input type="checkbox" id="applyInsights" checked /><span><strong>Update quick insights</strong></span></label>`,
       ].join("");
     }
 
@@ -1491,21 +1401,6 @@
     function closeStatusDialog() {
       statusDialog.classList.remove("open");
       statusDialogAppId = null;
-    }
-
-    async function fetchJobTextFromUrl(url) {
-      const res = await fetch(url, { mode: "cors" });
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      const contentType = res.headers.get("content-type") || "";
-      const raw = await res.text();
-      if (!contentType.includes("html")) {
-        return raw.slice(0, 12000);
-      }
-      const doc = new DOMParser().parseFromString(raw, "text/html");
-      const text = doc.body?.innerText || "";
-      return text.replace(/\n{3,}/g, "\n\n").trim().slice(0, 12000);
     }
 
     function renderDetail() {
@@ -1560,48 +1455,16 @@
             </div>
           </section>
 
-          <section class="section area-insights">
-            <div class="section-title">Insights</div>
-            <div class="insights-tabs">
-              <button id="insTabQuick" class="insights-tab ${app.insightsView === "quick" ? "active" : ""}">Quick insights</button>
-              <button id="insTabIntake" class="insights-tab ${app.insightsView === "intake" ? "active" : ""}">Job intake</button>
+          <section class="section area-intake">
+            <div class="section-title">Job intake</div>
+            <p class="workspace-copy">Paste full job description text to extract and apply fields faster.</p>
+            <textarea id="intakeInput" placeholder="Paste job posting text, requirements, compensation details, and links...">${escapeHtml(app.intakeText || "")}</textarea>
+            <div class="intake-actions">
+              <button id="extractIntakeBtn" class="btn primary">Extract fields</button>
+              <button id="applyIntakeBtn" class="btn">Apply to form</button>
+              <button id="clearIntakeBtn" class="btn">Clear</button>
             </div>
-            <div id="insQuickView" style="${app.insightsView === "intake" ? "display:none;" : ""}">
-              <p class="workspace-copy" style="margin-bottom:0.2rem;">Insights populate from pasted job description in Job intake.</p>
-              ${app.insightsGeneratedAt ? `<div class="freshness">Generated from pasted text • ${escapeHtml(fmtDate(app.insightsGeneratedAt))}</div>` : `<div class="freshness">No generated insights yet.</div>`}
-              <div class="insights-grid">
-                <div class="insight-card">
-                  <strong>Job summary</strong>
-                  <div class="insight-text" id="insSummary">${escapeHtml(app.insights.summary || "Paste a job post and click Extract fields to generate a quick summary.")}</div>
-                </div>
-                <div class="insight-card">
-                  <strong>Key requirements</strong>
-                  <div class="insight-text" id="insReq">${escapeHtml(app.insights.requirements || "Requirements will appear from parsed content.")}</div>
-                </div>
-                <div class="insight-card">
-                  <strong>Comp & signals</strong>
-                  <div class="insight-text" id="insComp">${escapeHtml(app.insights.compSignals || "Compensation and signal details will appear here.")}</div>
-                </div>
-                <div class="insight-card">
-                  <strong>Fit summary</strong>
-                  <div class="insight-text" id="insFit">${escapeHtml(app.insights.fit || "Fit summary will be generated after parsing.")}</div>
-                </div>
-              </div>
-            </div>
-            <div id="insIntakeView" style="${app.insightsView === "intake" ? "" : "display:none;"}">
-              <p class="workspace-copy">Paste a full job description or recruiter text to auto-fill fields and generate insights.</p>
-              <div class="intake-url-row">
-                <input id="intakeUrlInput" type="url" placeholder="Paste posting URL (optional)" value="${escapeHtml(app.intakeUrl || "")}" />
-                <button id="fetchIntakeUrlBtn" class="btn">Fetch URL text</button>
-              </div>
-              <textarea id="intakeInput" placeholder="Paste job posting text, requirements, compensation details, and links...">${escapeHtml(app.intakeText || "")}</textarea>
-              <div class="intake-actions">
-                <button id="extractIntakeBtn" class="btn primary">Extract fields</button>
-                <button id="applyIntakeBtn" class="btn">Apply to form</button>
-                <button id="clearIntakeBtn" class="btn">Clear</button>
-              </div>
-              <div class="preview" id="intakePreview">${renderIntakePreview(app.intakePreview)}</div>
-            </div>
+            <div class="preview" id="intakePreview">${renderIntakePreview(app.intakePreview)}</div>
           </section>
 
           <section class="section area-note">
@@ -1667,28 +1530,7 @@
 
       document.getElementById("openStatusBtn").addEventListener("click", () => openStatusDialog(app.id, "update"));
       document.getElementById("coreStatusPill").addEventListener("click", () => openStatusDialog(app.id, "history"));
-
       document.getElementById("noteInput").addEventListener("input", (e) => updateField(app, "note", e.target.value));
-
-      const insTabQuick = document.getElementById("insTabQuick");
-      const insTabIntake = document.getElementById("insTabIntake");
-      const insQuickView = document.getElementById("insQuickView");
-      const insIntakeView = document.getElementById("insIntakeView");
-
-      function setInsightsView(nextView) {
-        if (nextView !== "quick" && nextView !== "intake") return;
-        app.insightsView = nextView;
-        app.updatedAt = nowIso();
-        persist();
-        const quickActive = nextView === "quick";
-        insQuickView.style.display = quickActive ? "" : "none";
-        insIntakeView.style.display = quickActive ? "none" : "";
-        insTabQuick.classList.toggle("active", quickActive);
-        insTabIntake.classList.toggle("active", !quickActive);
-      }
-
-      insTabQuick.addEventListener("click", () => setInsightsView("quick"));
-      insTabIntake.addEventListener("click", () => setInsightsView("intake"));
 
       const drop = document.getElementById("workspaceDrop");
       const fileInput = document.getElementById("workspaceFileInput");
@@ -1710,7 +1552,6 @@
       }
 
       renderWorkspaceFiles();
-
       drop.addEventListener("click", () => fileInput.click());
       fileInput.addEventListener("change", (e) => {
         if (e.target.files) addWorkspaceFiles(e.target.files);
@@ -1737,55 +1578,17 @@
       });
 
       const intakeInput = document.getElementById("intakeInput");
-      const intakeUrlInput = document.getElementById("intakeUrlInput");
-      const fetchIntakeUrlBtn = document.getElementById("fetchIntakeUrlBtn");
       const intakePreview = document.getElementById("intakePreview");
 
       if (state.pendingIntakeFocusId === app.id) {
         state.pendingIntakeFocusId = null;
-        const target = intakeUrlInput.value.trim() ? intakeInput : intakeUrlInput;
-        requestAnimationFrame(() => target.focus());
+        requestAnimationFrame(() => intakeInput.focus());
       }
 
       intakeInput.addEventListener("input", () => {
         app.intakeText = intakeInput.value;
         app.updatedAt = nowIso();
         persist();
-      });
-
-      intakeUrlInput.addEventListener("input", () => {
-        app.intakeUrl = intakeUrlInput.value.trim();
-        app.updatedAt = nowIso();
-        persist();
-      });
-
-      fetchIntakeUrlBtn.addEventListener("click", async () => {
-        const url = intakeUrlInput.value.trim();
-        if (!url) {
-          showToast("Add a URL first.", "warn");
-          return;
-        }
-        fetchIntakeUrlBtn.disabled = true;
-        const previous = fetchIntakeUrlBtn.textContent;
-        fetchIntakeUrlBtn.textContent = "Fetching...";
-        try {
-          const text = await fetchJobTextFromUrl(url);
-          if (!text) {
-            showToast("Could not extract readable text from this URL.", "error");
-            return;
-          }
-          const prefix = `Source URL: ${url}\n\n`;
-          app.intakeText = `${prefix}${text}`.slice(0, 14000);
-          app.updatedAt = nowIso();
-          persist();
-          intakeInput.value = app.intakeText;
-          showToast("Job text fetched from URL.", "success");
-        } catch (err) {
-          showToast(`Fetch failed (${err.message}). Site may block CORS.`, "error");
-        } finally {
-          fetchIntakeUrlBtn.disabled = false;
-          fetchIntakeUrlBtn.textContent = previous;
-        }
       });
 
       document.getElementById("extractIntakeBtn").addEventListener("click", () => {
@@ -1795,8 +1598,6 @@
           return;
         }
         app.intakePreview = parsed;
-        app.insights = { ...EMPTY_INSIGHTS, ...parsed.insights };
-        app.insightsGeneratedAt = parsed.extractedAt || nowIso();
         app.updatedAt = nowIso();
         persist();
         renderDetail();
@@ -1813,15 +1614,10 @@
         const applyCompany = document.getElementById("applyCompany")?.checked;
         const applyLocation = document.getElementById("applyLocation")?.checked;
         const applyWorkMode = document.getElementById("applyWorkMode")?.checked;
-        const applyInsights = document.getElementById("applyInsights")?.checked;
         if (applyTitle && p.title) app.title = p.title;
         if (applyCompany && p.company) app.company = p.company;
         if (applyLocation && p.location) app.location = p.location;
         if (applyWorkMode && p.workMode && p.workMode !== "Unknown") app.workMode = p.workMode;
-        if (applyInsights) {
-          app.insights = { ...EMPTY_INSIGHTS, ...p.insights };
-          app.insightsGeneratedAt = p.extractedAt || nowIso();
-        }
         app.updatedAt = nowIso();
         persist();
         render();
@@ -1830,12 +1626,10 @@
 
       document.getElementById("clearIntakeBtn").addEventListener("click", () => {
         app.intakeText = "";
-        app.intakeUrl = "";
         app.intakePreview = null;
         app.updatedAt = nowIso();
         persist();
         intakeInput.value = "";
-        intakeUrlInput.value = "";
         intakePreview.innerHTML = renderIntakePreview(null);
         showToast("Intake content cleared.");
       });
@@ -1865,7 +1659,7 @@
       newTabPost.classList.toggle("active", !manual);
       newPanelManual.classList.toggle("active", manual);
       newPanelPost.classList.toggle("active", !manual);
-      newCreate.textContent = manual ? "Create" : "Create from post";
+      newCreate.textContent = manual ? "Create" : "Create from description";
     }
 
     function openNewDialog() {
@@ -1873,11 +1667,10 @@
       newTitle.value = "";
       newLocation.value = "";
       newMode.value = "Unknown";
-      newPostUrl.value = "";
       newPostText.value = "";
       setNewDialogMode("post");
       newDialog.classList.add("open");
-      newPostUrl.focus();
+      newPostText.focus();
     }
 
     function closeNewDialog() {
@@ -1898,7 +1691,6 @@
           location: newLocation.value.trim(),
           workMode: newMode.value,
         });
-        app.insightsView = "intake";
         state.apps.unshift(app);
         state.activeId = app.id;
         state.pendingIntakeFocusId = app.id;
@@ -1909,42 +1701,21 @@
         return;
       }
 
-      const sourceUrl = newPostUrl.value.trim();
       let sourceText = newPostText.value.trim();
-      if (!sourceText && sourceUrl) {
-        newCreate.disabled = true;
-        const prev = newCreate.textContent;
-        newCreate.textContent = "Fetching...";
-        try {
-          sourceText = await fetchJobTextFromUrl(sourceUrl);
-        } catch (err) {
-          showToast(`Could not fetch URL (${err.message}). Paste text instead.`, "error");
-        } finally {
-          newCreate.disabled = false;
-          newCreate.textContent = state.newDialogMode === "manual" ? "Create" : "Create from post";
-        }
-      }
-
-      if (!sourceText && !sourceUrl) {
-        showToast("Add job URL or pasted job description.", "warn");
+      if (!sourceText) {
+        showToast("Paste a job description.", "warn");
         return;
       }
 
-      const parsed = parseIntakeText(sourceText || sourceUrl);
+      const parsed = parseIntakeText(sourceText);
       const app = createApp({
         company: parsed?.company || "Unknown company",
         title: parsed?.title || "New role",
         location: parsed?.location || "",
         workMode: parsed?.workMode || "Unknown",
       });
-      app.intakeUrl = sourceUrl;
       app.intakeText = sourceText;
       app.intakePreview = parsed;
-      app.insightsView = "intake";
-      if (parsed?.insights) {
-        app.insights = { ...EMPTY_INSIGHTS, ...parsed.insights };
-        app.insightsGeneratedAt = parsed.extractedAt || nowIso();
-      }
 
       state.apps.unshift(app);
       state.activeId = app.id;
@@ -1952,7 +1723,7 @@
       persist();
       closeNewDialog();
       render();
-      showToast("Application created from job post.", "success");
+      showToast("Application created from description.", "success");
     }
 
     function exportTrackerData() {
