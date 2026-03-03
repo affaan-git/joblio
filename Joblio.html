@@ -394,28 +394,28 @@
       grid-template-columns: minmax(0, 1.45fr) minmax(320px, 1fr);
       grid-template-areas:
         "core links"
-        "workspace intake"
-        "workspace intake"
-        "note intake";
+        "workspace description"
+        "workspace description"
+        "note description";
       gap: 0.72rem;
     }
 
     .area-core { grid-area: core; }
     .area-workspace { grid-area: workspace; }
-    .area-intake { grid-area: intake; }
+    .area-description { grid-area: description; }
     .area-note { grid-area: note; }
     .area-links { grid-area: links; }
 
-    .area-intake {
+    .area-description {
       grid-template-rows: auto auto 1fr;
     }
 
-    .area-intake .field {
+    .area-description .field {
       height: 100%;
       grid-template-rows: auto 1fr;
     }
 
-    .area-intake textarea {
+    .area-description textarea {
       height: 100%;
     }
 
@@ -501,8 +501,17 @@
       z-index: 1;
     }
 
+    .drop-zone-subtext {
+      font-size: 0.74rem;
+      margin-top: 0.2rem;
+    }
+
     .drop-zone-copy-spacer {
       height: 34px;
+    }
+
+    .drop-zone.has-files .drop-zone-subtext {
+      display: none;
     }
 
     .drop-zone.highlight {
@@ -531,6 +540,33 @@
       display: grid;
       gap: 0.2rem;
       text-align: left;
+    }
+
+    .file-tile-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.35rem;
+    }
+
+    .file-remove-btn {
+      border: 1px solid var(--border);
+      background: var(--bg-panel);
+      color: var(--text-muted);
+      border-radius: 999px;
+      width: 1.15rem;
+      height: 1.15rem;
+      line-height: 1;
+      display: inline-grid;
+      place-items: center;
+      cursor: pointer;
+      font-size: 0.74rem;
+      padding: 0;
+    }
+
+    .file-remove-btn:hover {
+      border-color: var(--danger);
+      color: var(--danger);
     }
 
     .file-type {
@@ -790,7 +826,7 @@
         grid-template-areas:
           "core"
           "workspace"
-          "intake"
+          "description"
           "note"
           "links";
       }
@@ -954,7 +990,7 @@
     const state = {
       apps: [],
       activeId: null,
-      pendingIntakeFocusId: null,
+      pendingDescriptionFocusId: null,
       search: "",
       sortBy: "recent_update",
       statusFilter: "all",
@@ -1082,7 +1118,7 @@
         applicationUrl: "",
         note: "",
         workspaceFiles: [],
-        intakeText: "",
+        descriptionText: "",
         createdAt: t,
         updatedAt: t,
       };
@@ -1306,9 +1342,10 @@
           })
           .filter(Boolean);
       }
-      if (typeof app.intakeText !== "string") {
-        app.intakeText = "";
+      if (typeof app.descriptionText !== "string") {
+        app.descriptionText = typeof app.intakeText === "string" ? app.intakeText : "";
       }
+      if ("intakeText" in app) delete app.intakeText;
       normalizeStatusHistory(app);
     }
 
@@ -1414,7 +1451,7 @@
             <div class="drop-zone" id="workspaceDrop">
               <div class="drop-zone-copy">
                 <div>Drop files here or click to select</div>
-                <div style="font-size:0.74rem; margin-top:0.2rem;">No files added</div>
+                <div class="drop-zone-subtext">No files added</div>
               </div>
               <div class="drop-zone-copy-spacer" aria-hidden="true"></div>
               <input id="workspaceFileInput" type="file" multiple style="display:none;" />
@@ -1422,12 +1459,12 @@
             </div>
           </section>
 
-          <section class="section area-intake">
+          <section class="section area-description">
             <div class="section-title">Job description</div>
             <div class="muted-help">Paste the full job posting text to keep with this application.</div>
             <div class="field">
-              <label class="label" for="intakeInput">Description</label>
-              <textarea id="intakeInput" placeholder="Paste job posting text, requirements, compensation details, and links...">${escapeHtml(app.intakeText || "")}</textarea>
+              <label class="label" for="descriptionInput">Description</label>
+              <textarea id="descriptionInput" placeholder="Paste job posting text, requirements, compensation details, and links...">${escapeHtml(app.descriptionText || "")}</textarea>
             </div>
           </section>
 
@@ -1502,18 +1539,36 @@
 
       function renderWorkspaceFiles() {
         if (!app.workspaceFiles.length) {
+          drop.classList.remove("has-files");
           filesEl.innerHTML = "";
           return;
         }
+        drop.classList.add("has-files");
         filesEl.innerHTML = app.workspaceFiles
-          .map((file) => `
+          .map((file, index) => `
             <article class="file-tile" title="${escapeHtml(file.name)}">
-              <span class="file-type">${escapeHtml(getFileBadge(file))}</span>
+              <div class="file-tile-head">
+                <span class="file-type">${escapeHtml(getFileBadge(file))}</span>
+                <button class="file-remove-btn" type="button" data-file-index="${index}" aria-label="Remove ${escapeHtml(file.name)}">×</button>
+              </div>
               <div class="file-name">${escapeHtml(file.name)}</div>
               <div class="file-meta">${escapeHtml(formatFileSize(file.size))}</div>
             </article>
           `)
           .join("");
+
+        filesEl.querySelectorAll(".file-remove-btn").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const idx = Number(btn.dataset.fileIndex);
+            if (!Number.isInteger(idx) || idx < 0 || idx >= app.workspaceFiles.length) return;
+            app.workspaceFiles.splice(idx, 1);
+            app.updatedAt = nowIso();
+            persist();
+            renderWorkspaceFiles();
+          });
+        });
       }
 
       function addWorkspaceFiles(fileList) {
@@ -1555,15 +1610,15 @@
         if (e.dataTransfer?.files) addWorkspaceFiles(e.dataTransfer.files);
       });
 
-      const intakeInput = document.getElementById("intakeInput");
+      const descriptionInput = document.getElementById("descriptionInput");
 
-      if (state.pendingIntakeFocusId === app.id) {
-        state.pendingIntakeFocusId = null;
-        requestAnimationFrame(() => intakeInput.focus());
+      if (state.pendingDescriptionFocusId === app.id) {
+        state.pendingDescriptionFocusId = null;
+        requestAnimationFrame(() => descriptionInput.focus());
       }
 
-      intakeInput.addEventListener("input", () => {
-        app.intakeText = intakeInput.value;
+      descriptionInput.addEventListener("input", () => {
+        app.descriptionText = descriptionInput.value;
         app.updatedAt = nowIso();
         persist();
       });
@@ -1615,11 +1670,11 @@
         location: newLocation.value.trim(),
         workMode: newMode.value,
       });
-      app.intakeText = sourceText;
+      app.descriptionText = sourceText;
 
       state.apps.unshift(app);
       state.activeId = app.id;
-      state.pendingIntakeFocusId = sourceText ? null : app.id;
+      state.pendingDescriptionFocusId = sourceText ? null : app.id;
       persist();
       closeNewDialog();
       render();
