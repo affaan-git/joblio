@@ -487,6 +487,22 @@
       text-align: center;
       cursor: pointer;
       transition: border-color 0.14s ease, background 0.14s ease;
+      position: relative;
+    }
+
+    .drop-zone-copy {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-content: center;
+      text-align: center;
+      pointer-events: none;
+      padding: 0.85rem;
+      z-index: 1;
+    }
+
+    .drop-zone-copy-spacer {
+      height: 34px;
     }
 
     .drop-zone.highlight {
@@ -1405,8 +1421,11 @@
               Files stay local to this tracker view.
             </p>
             <div class="drop-zone" id="workspaceDrop">
-              <div style="text-align:center;">Drop files here or click to select</div>
-              <div style="font-size:0.74rem; margin-top:0.2rem; text-align:center;">No files added</div>
+              <div class="drop-zone-copy">
+                <div>Drop files here or click to select</div>
+                <div style="font-size:0.74rem; margin-top:0.2rem;">No files added</div>
+              </div>
+              <div class="drop-zone-copy-spacer" aria-hidden="true"></div>
               <input id="workspaceFileInput" type="file" multiple style="display:none;" />
               <div class="workspace-files" id="workspaceFiles"></div>
             </div>
