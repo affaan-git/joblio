@@ -24,6 +24,8 @@ const MAX_FILE_BYTES = Number(process.env.MAX_FILE_BYTES || 25 * 1024 * 1024);
 const MAX_APPS = Number(process.env.MAX_APPS || 10000);
 const LOG_ROTATE_BYTES = Number(process.env.LOG_ROTATE_BYTES || 5 * 1024 * 1024);
 const API_TOKEN = process.env.JOBLIO_API_TOKEN || '';
+const BASIC_AUTH_USER = process.env.JOBLIO_BASIC_AUTH_USER || '';
+const BASIC_AUTH_PASS = process.env.JOBLIO_BASIC_AUTH_PASS || '';
 const AUDIT_KEY = process.env.JOBLIO_AUDIT_KEY || '';
 const HEALTH_VERBOSE = process.env.JOBLIO_HEALTH_VERBOSE === '1';
 const ERROR_VERBOSE = process.env.JOBLIO_ERROR_VERBOSE === '1';
@@ -119,6 +121,9 @@ function validateStartupConfig() {
   }
   if (STRICT_MODE && !API_TOKEN) {
     throw new Error('JOBLIO_STRICT_MODE=1 requires JOBLIO_API_TOKEN.');
+  }
+  if (STRICT_MODE && (!BASIC_AUTH_USER || !BASIC_AUTH_PASS)) {
+    throw new Error('JOBLIO_STRICT_MODE=1 requires JOBLIO_BASIC_AUTH_USER and JOBLIO_BASIC_AUTH_PASS.');
   }
 }
 
@@ -438,10 +443,6 @@ function requireWriteAuth(req, res) {
     json(res, 403, { error: 'Forbidden origin' });
     return false;
   }
-  if (!hasValidApiToken(req)) {
-    json(res, 401, { error: 'Unauthorized' });
-    return false;
-  }
   return true;
 }
 
@@ -449,6 +450,35 @@ function hasValidApiToken(req) {
   if (!API_TOKEN) return true;
   const supplied = req.headers['x-joblio-token'];
   return typeof supplied === 'string' && supplied === API_TOKEN;
+}
+
+function hasValidBasicAuth(req) {
+  if (!STRICT_MODE) return true;
+  if (!BASIC_AUTH_USER || !BASIC_AUTH_PASS) return false;
+  const auth = String(req.headers.authorization || '');
+  if (!auth.startsWith('Basic ')) return false;
+  try {
+    const decoded = Buffer.from(auth.slice(6), 'base64').toString('utf8');
+    const idx = decoded.indexOf(':');
+    if (idx < 0) return false;
+    const user = decoded.slice(0, idx);
+    const pass = decoded.slice(idx + 1);
+    return user === BASIC_AUTH_USER && pass === BASIC_AUTH_PASS;
+  } catch {
+    return false;
+  }
+}
+
+function requireBasicAuth(req, res) {
+  if (hasValidBasicAuth(req)) return true;
+  applySecurityHeaders(res);
+  res.setHeader('WWW-Authenticate', 'Basic realm="Joblio", charset="UTF-8"');
+  res.writeHead(401, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store',
+  });
+  res.end(JSON.stringify({ error: 'Unauthorized' }));
+  return false;
 }
 
 function isTrustedRequestOrigin(req) {
@@ -604,6 +634,9 @@ async function findTrashedFilePath(appId, fileId) {
 }
 
 async function handleApi(req, res, url) {
+  if (!hasValidApiToken(req)) {
+    return json(res, 401, { error: 'Unauthorized' });
+  }
   if (!requireWriteAuth(req, res)) return;
   if (!enforceRateLimit(req, res, url.pathname)) return;
 
@@ -899,6 +932,7 @@ async function serveStatic(req, res, url) {
 
 const server = http.createServer(async (req, res) => {
   try {
+    if (!requireBasicAuth(req, res)) return;
     const url = new URL(req.url, `http://${req.headers.host || `${HOST}:${PORT}`}`);
     if (url.pathname.startsWith('/api/')) {
       return await handleApi(req, res, url);

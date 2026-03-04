@@ -9,6 +9,8 @@ const host = process.env.HOST || '127.0.0.1';
 const strictMode = process.env.JOBLIO_STRICT_MODE !== '0';
 const allowRemote = process.env.JOBLIO_ALLOW_REMOTE === '1';
 const token = process.env.JOBLIO_API_TOKEN || '';
+const basicUser = process.env.JOBLIO_BASIC_AUTH_USER || '';
+const basicPass = process.env.JOBLIO_BASIC_AUTH_PASS || '';
 const dataDir = path.join(root, '.joblio-data');
 const templatePath = path.join(root, 'templates', 'resume-template.md');
 
@@ -22,6 +24,9 @@ if (!allowRemote && !localhostHosts.has(String(host).trim().toLowerCase())) {
 
 if (strictMode && !token) {
   issues.push('JOBLIO_API_TOKEN is required when strict mode is enabled (default).');
+}
+if (strictMode && (!basicUser || !basicPass)) {
+  issues.push('JOBLIO_BASIC_AUTH_USER and JOBLIO_BASIC_AUTH_PASS are required when strict mode is enabled (default).');
 }
 
 try {

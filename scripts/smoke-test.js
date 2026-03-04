@@ -9,11 +9,18 @@ const port = Number(process.env.SMOKE_PORT || 8799);
 const host = '127.0.0.1';
 const base = `http://${host}:${port}`;
 const token = process.env.SMOKE_TOKEN || 'smoke-token-123';
+const basicUser = process.env.SMOKE_BASIC_USER || 'smoke-user';
+const basicPass = process.env.SMOKE_BASIC_PASS || 'smoke-pass';
+const basicAuth = Buffer.from(`${basicUser}:${basicPass}`).toString('base64');
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 async function req(url, opts = {}) {
-  const res = await fetch(url, opts);
+  const headers = {
+    Authorization: `Basic ${basicAuth}`,
+    ...(opts.headers || {}),
+  };
+  const res = await fetch(url, { ...opts, headers });
   let body = null;
   const text = await res.text();
   try { body = text ? JSON.parse(text) : null; } catch { body = text; }
@@ -39,6 +46,8 @@ async function waitForServer(timeoutMs = 8000) {
     PORT: String(port),
     JOBLIO_STRICT_MODE: '1',
     JOBLIO_API_TOKEN: token,
+    JOBLIO_BASIC_AUTH_USER: basicUser,
+    JOBLIO_BASIC_AUTH_PASS: basicPass,
     PURGE_MIN_AGE_SEC: '0',
     JOBLIO_HEALTH_VERBOSE: '1',
   };
@@ -57,6 +66,11 @@ async function waitForServer(timeoutMs = 8000) {
     await waitForServer();
 
     let r = await req(`${base}/api/state`);
+    if (r.res.status !== 401) throw new Error('Expected unauthorized GET /api/state without API token');
+
+    r = await req(`${base}/api/state`, {
+      headers: { 'x-joblio-token': token },
+    });
     if (!r.res.ok || !r.body?.state) throw new Error('GET /api/state failed');
 
     r = await req(`${base}/api/state`, {
@@ -96,6 +110,8 @@ async function waitForServer(timeoutMs = 8000) {
     if (!r.res.ok) throw new Error('Restore file failed');
 
     r = await req(`${base}/api/template/resume`);
+    if (r.res.status !== 401) throw new Error('Expected unauthorized template download without API token');
+    r = await req(`${base}/api/template/resume`, { headers: { 'x-joblio-token': token } });
     if (!r.res.ok || !String(r.body || '').includes('Resume Template')) throw new Error('Resume template endpoint failed');
 
     r = await req(`${base}/api/health?verbose=1`, { headers: { 'x-joblio-token': token } });

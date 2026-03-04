@@ -1027,7 +1027,6 @@
         <div id="dataMenu" class="action-menu">
           <button id="setTokenBtn">Set API token</button>
           <button id="clearTokenBtn">Clear API token</button>
-          <button id="healthReportBtn">Health report</button>
           <button id="resumeTemplateBtn">Resume template</button>
           <button id="exportBtn">Export JSON</button>
           <button id="importBtn">Import JSON</button>
@@ -1214,7 +1213,6 @@
     const importBtn = document.getElementById("importBtn");
     const setTokenBtn = document.getElementById("setTokenBtn");
     const clearTokenBtn = document.getElementById("clearTokenBtn");
-    const healthReportBtn = document.getElementById("healthReportBtn");
     const resumeTemplateBtn = document.getElementById("resumeTemplateBtn");
     const importInput = document.getElementById("importInput");
 
@@ -1463,6 +1461,34 @@
       return res.json();
     }
 
+    async function downloadWithAuth(path, filename) {
+      const apiToken = getApiToken();
+      const res = await fetch(`${API_BASE}${path}`, {
+        headers: {
+          ...(apiToken ? { "X-Joblio-Token": apiToken } : {}),
+        },
+      });
+      if (!res.ok) {
+        let message = `HTTP ${res.status}`;
+        try {
+          const data = await res.json();
+          if (data?.error) message = data.error;
+        } catch {}
+        const err = new Error(message);
+        err.status = res.status;
+        throw err;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
     let persistTimer = null;
     let persistInFlight = false;
     let persistQueued = false;
@@ -1598,7 +1624,7 @@
         const payload = await requestJSON("/api/state");
         applyServerState(payload.state || {});
         setBackendHealth("connected", "Online");
-      } catch {
+      } catch (err) {
         state.apps = [];
         state.trashApps = [];
         state.trashFiles = [];
@@ -1607,7 +1633,11 @@
         document.body.classList.toggle("theme-light", false);
         syncThemeLabel();
         setBackendHealth("disconnected", "Offline");
-        showToast("Backend unavailable. Start server.js", "error");
+        if (err?.status === 401) {
+          showToast("Unauthorized. Set API token in Data menu.", "error");
+        } else {
+          showToast("Backend unavailable. Start server.js", "error");
+        }
       }
 
       if (!state.apps.length && !state.trashApps.length && !state.trashFiles.length) {
@@ -2624,13 +2654,18 @@
       showToast("API token cleared.", "warn");
       dataMenu.classList.remove("open");
     });
-    healthReportBtn.addEventListener("click", async () => {
+    backendHealth.style.cursor = "pointer";
+    backendHealth.addEventListener("click", async () => {
       dataMenu.classList.remove("open");
       await openHealthDialog();
     });
     resumeTemplateBtn.addEventListener("click", () => {
       dataMenu.classList.remove("open");
-      window.location.href = "/api/template/resume";
+      downloadWithAuth("/api/template/resume", "joblio-resume-template.md")
+        .then(() => showToast("Resume template downloaded.", "success"))
+        .catch((err) => {
+          showToast(err?.status === 401 ? "Unauthorized. Set API token in Data menu." : "Could not download template.", "error");
+        });
     });
     importBtn.addEventListener("click", () => {
       dataMenu.classList.remove("open");

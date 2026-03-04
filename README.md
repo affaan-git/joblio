@@ -4,12 +4,15 @@
 
 ```bash
 cd tracker
-JOBLIO_API_TOKEN='set-a-long-random-secret' npm start
+JOBLIO_API_TOKEN='set-a-long-random-secret' \
+JOBLIO_BASIC_AUTH_USER='joblio' \
+JOBLIO_BASIC_AUTH_PASS='set-a-strong-password' \
+npm start
 ```
 
 Then open: `http://127.0.0.1:8787`
 
-Set token in UI: `Data -> Set API token`
+Sign in via browser basic auth prompt, then set API token in UI: `Data -> Set API token`
 
 ## Secure Local Start (Recommended)
 
@@ -36,10 +39,13 @@ This script:
 - Optional write auth token:
   - Set `JOBLIO_API_TOKEN=your-secret-token` before `npm start`
   - Client sends token using `localStorage["joblio-api-token"]`
-  - Mutating API calls (`POST`/`PUT`/`DELETE`) require header `X-Joblio-Token`
+  - All API calls require header `X-Joblio-Token` in strict mode
+- HTTP Basic auth (global):
+  - Set `JOBLIO_BASIC_AUTH_USER` and `JOBLIO_BASIC_AUTH_PASS`
+  - Required for all routes in strict mode (UI + API + static)
 - Strict runtime mode is enabled by default:
   - `JOBLIO_STRICT_MODE=1` behavior is default (`JOBLIO_STRICT_MODE=0` disables)
-  - Requires `JOBLIO_API_TOKEN` for startup in strict mode
+  - Requires `JOBLIO_API_TOKEN`, `JOBLIO_BASIC_AUTH_USER`, and `JOBLIO_BASIC_AUTH_PASS` for startup
   - Server refuses non-local bind host unless `JOBLIO_ALLOW_REMOTE=1`
   - UI can set token locally from Data menu (`Set API token`)
 - Request/body limits are enforced server-side:
@@ -79,7 +85,7 @@ This script:
 - `GET /api/state`
 - `PUT /api/state` with `{ "state": { ... } }`
 - `GET /api/health`
-- `GET /api/health?verbose=1` (requires token unless verbose mode enabled)
+- `GET /api/health?verbose=1` (requires token in strict mode)
 - `GET /api/integrity/verify` (requires token)
 - `POST /api/files/upload` with `{ appId, name, type, size, contentBase64 }`
 - `DELETE /api/files/:fileId`
