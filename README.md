@@ -23,9 +23,11 @@ npm run start:secure
 
 This script:
 - Generates `JOBLIO_API_TOKEN` for the current shell if missing
+- Generates `JOBLIO_BASIC_AUTH_USER`/`JOBLIO_BASIC_AUTH_PASS` if missing
 - Enforces strict mode defaults
 - Runs preflight checks
 - Starts server and prints token for UI entry
+- Works on macOS, Linux, and Windows
 
 ## What v1 backend stores
 
@@ -101,13 +103,17 @@ This script:
 Get state:
 
 ```bash
-curl -s http://127.0.0.1:8787/api/state
+curl -s http://127.0.0.1:8787/api/state \
+  -u 'joblio:your-basic-auth-pass' \
+  -H 'x-joblio-token: your-api-token'
 ```
 
 Save state:
 
 ```bash
 curl -s -X PUT http://127.0.0.1:8787/api/state \\
+  -u 'joblio:your-basic-auth-pass' \\
+  -H 'x-joblio-token: your-api-token' \\
   -H 'content-type: application/json' \\
   --data '{"state":{"version":1,"theme":"dark","activeId":null,"apps":[],"trashApps":[],"trashFiles":[]}}'
 ```
@@ -116,6 +122,8 @@ Upload file:
 
 ```bash
 curl -s -X POST http://127.0.0.1:8787/api/files/upload \\
+  -u 'joblio:your-basic-auth-pass' \\
+  -H 'x-joblio-token: your-api-token' \\
   -H 'content-type: application/json' \\
   --data '{"appId":"app-123","name":"resume.txt","type":"text/plain","size":5,"contentBase64":"aGVsbG8="}'
 ```
@@ -158,7 +166,8 @@ npm run smoke
 
 Backups are written to:
 
-- `tracker/backups/joblio-data-YYYYMMDD-HHMMSS.tar.gz`
+- `tracker/backups/joblio-data-YYYYMMDD-HHMMSS.tar.gz` (macOS/Linux)
+- `tracker/backups/joblio-data-YYYYMMDD-HHMMSS.zip` (Windows)
 
 This archive includes:
 
@@ -170,10 +179,16 @@ This archive includes:
 ## Restore
 
 1. Stop the running server.
-2. From `tracker/`, extract a backup:
+2. Restore from `tracker/`:
 
 ```bash
-tar -xzf backups/joblio-data-YYYYMMDD-HHMMSS.tar.gz
+npm run restore -- --file backups/joblio-data-YYYYMMDD-HHMMSS.tar.gz --yes
+```
+
+Windows example:
+
+```bash
+npm run restore -- --file backups/joblio-data-YYYYMMDD-HHMMSS.zip --yes
 ```
 
 3. Start the server again:

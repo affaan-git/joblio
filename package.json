@@ -6,8 +6,9 @@
   "scripts": {
     "preflight": "node ./scripts/preflight.js",
     "start": "npm run preflight && node server.js",
-    "start:secure": "./scripts/setup-local.sh",
+    "start:secure": "node ./scripts/setup-local.js",
     "smoke": "node ./scripts/smoke-test.js",
-    "backup": "./scripts/backup.sh"
+    "backup": "node ./scripts/backup.js",
+    "restore": "node ./scripts/restore.js"
   }
 }
