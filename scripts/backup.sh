@@ -8,11 +8,12 @@ STAMP="$(date +%Y%m%d-%H%M%S)"
 
 mkdir -p "$BACKUP_DIR"
 
-if [ ! -f "$DATA_DIR/state.json" ]; then
-  echo "No state file found at $DATA_DIR/state.json"
+if [ ! -d "$DATA_DIR" ]; then
+  echo "No data directory found at $DATA_DIR"
   exit 1
 fi
 
-cp "$DATA_DIR/state.json" "$BACKUP_DIR/state-$STAMP.json"
+ARCHIVE="$BACKUP_DIR/joblio-data-$STAMP.tar.gz"
+tar -C "$ROOT_DIR" -czf "$ARCHIVE" .joblio-data
 
-echo "Backup created: $BACKUP_DIR/state-$STAMP.json"
+echo "Backup created: $ARCHIVE"

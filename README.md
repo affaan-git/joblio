@@ -70,4 +70,26 @@ npm run backup
 
 Backups are written to:
 
-- `tracker/backups/state-YYYYMMDD-HHMMSS.json`
+- `tracker/backups/joblio-data-YYYYMMDD-HHMMSS.tar.gz`
+
+This archive includes:
+
+- `.joblio-data/state.json`
+- `.joblio-data/storage/`
+- `.joblio-data/storage-trash/`
+- `.joblio-data/logs/`
+
+## Restore
+
+1. Stop the running server.
+2. From `tracker/`, extract a backup:
+
+```bash
+tar -xzf backups/joblio-data-YYYYMMDD-HHMMSS.tar.gz
+```
+
+3. Start the server again:
+
+```bash
+npm start
+```

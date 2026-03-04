@@ -16,6 +16,10 @@ const TRASH_STORAGE_DIR = path.join(DATA_DIR, 'storage-trash');
 const LOG_DIR = path.join(DATA_DIR, 'logs');
 const STATE_PATH = path.join(DATA_DIR, 'state.json');
 const APP_HTML = path.join(ROOT_DIR, 'Joblio.html');
+const MAX_JSON_BODY_BYTES = Number(process.env.MAX_JSON_BODY_BYTES || 5 * 1024 * 1024);
+const MAX_UPLOAD_JSON_BYTES = Number(process.env.MAX_UPLOAD_JSON_BYTES || 35 * 1024 * 1024);
+const MAX_FILE_BYTES = Number(process.env.MAX_FILE_BYTES || 25 * 1024 * 1024);
+const MAX_APPS = Number(process.env.MAX_APPS || 10000);
 
 const DEFAULT_STATE = {
   version: 1,
@@ -26,6 +30,10 @@ const DEFAULT_STATE = {
   trashFiles: [],
   updatedAt: new Date().toISOString(),
 };
+
+let writeQueue = Promise.resolve();
+let lastErrorMessage = '';
+let lastErrorAt = '';
 
 async function ensureDirs() {
   await fsp.mkdir(DATA_DIR, { recursive: true });
@@ -59,6 +67,12 @@ async function writeState(next) {
   await fsp.writeFile(tmp, JSON.stringify(clean, null, 2), 'utf8');
   await fsp.rename(tmp, STATE_PATH);
   return clean;
+}
+
+function queueMutation(fn) {
+  const run = writeQueue.then(() => fn());
+  writeQueue = run.catch(() => {});
+  return run;
 }
 
 function sanitizeState(input) {
@@ -146,18 +160,29 @@ function notFound(res) {
 }
 
 function serverError(res, err) {
+  lastErrorMessage = err?.message || String(err);
+  lastErrorAt = new Date().toISOString();
   json(res, 500, { error: 'Server error', detail: err?.message || String(err) });
 }
 
-async function readBody(req) {
+async function readBody(req, maxBytes = MAX_JSON_BODY_BYTES) {
   const chunks = [];
+  let total = 0;
   for await (const chunk of req) chunks.push(chunk);
+  for (const c of chunks) total += c.length;
+  if (total > maxBytes) {
+    const err = new Error(`Payload too large (${total} bytes)`);
+    err.statusCode = 413;
+    throw err;
+  }
   const raw = Buffer.concat(chunks).toString('utf8');
   if (!raw) return {};
   try {
     return JSON.parse(raw);
   } catch {
-    throw new Error('Invalid JSON body');
+    const err = new Error('Invalid JSON body');
+    err.statusCode = 400;
+    throw err;
   }
 }
 
@@ -204,7 +229,18 @@ async function findTrashedFilePath(appId, fileId) {
 
 async function handleApi(req, res, url) {
   if (req.method === 'GET' && url.pathname === '/api/health') {
-    return json(res, 200, { ok: true, at: new Date().toISOString() });
+    return json(res, 200, {
+      ok: true,
+      at: new Date().toISOString(),
+      uptimeSec: Math.floor(process.uptime()),
+      lastError: lastErrorMessage || null,
+      lastErrorAt: lastErrorAt || null,
+      limits: {
+        maxJsonBodyBytes: MAX_JSON_BODY_BYTES,
+        maxUploadJsonBytes: MAX_UPLOAD_JSON_BYTES,
+        maxFileBytes: MAX_FILE_BYTES,
+      },
+    });
   }
 
   if (req.method === 'GET' && url.pathname === '/api/state') {
@@ -213,17 +249,31 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === 'PUT' && url.pathname === '/api/state') {
-    const body = await readBody(req);
+    const body = await readBody(req, MAX_JSON_BODY_BYTES);
     if (!body || typeof body !== 'object' || !body.state || typeof body.state !== 'object') {
       return json(res, 400, { error: 'Expected { state } payload' });
     }
-    const next = await writeState(body.state);
+    const next = await queueMutation(async () => {
+      const current = await readState();
+      const incoming = sanitizeState({
+        version: 1,
+        theme: body.state.theme,
+        activeId: body.state.activeId,
+        apps: Array.isArray(body.state.apps) ? body.state.apps : current.apps,
+        trashApps: Array.isArray(body.state.trashApps) ? body.state.trashApps : current.trashApps,
+        trashFiles: Array.isArray(body.state.trashFiles) ? body.state.trashFiles : current.trashFiles,
+      });
+      if (incoming.apps.length > MAX_APPS || incoming.trashApps.length > MAX_APPS) {
+        throw new Error(`Too many applications (limit ${MAX_APPS})`);
+      }
+      return writeState(incoming);
+    });
     await logAction('state.put', { apps: next.apps.length, trashApps: next.trashApps.length, trashFiles: next.trashFiles.length });
     return json(res, 200, { state: next });
   }
 
   if (req.method === 'POST' && url.pathname === '/api/files/upload') {
-    const body = await readBody(req);
+    const body = await readBody(req, MAX_UPLOAD_JSON_BYTES);
     const appId = str(body.appId);
     const fileName = str(body.name);
     const base64 = str(body.contentBase64);
@@ -235,6 +285,9 @@ async function handleApi(req, res, url) {
     const dir = await ensureAppStorageDir(appId);
     const filePath = path.join(dir, `${id}-${safeName}`);
     const buffer = Buffer.from(base64, 'base64');
+    if (buffer.byteLength > MAX_FILE_BYTES) {
+      return json(res, 413, { error: `File too large (${buffer.byteLength} bytes). Limit: ${MAX_FILE_BYTES}` });
+    }
     await fsp.writeFile(filePath, buffer);
     await logAction('file.upload', { appId, fileId: id, name: safeName, size: buffer.byteLength });
     return json(res, 200, {
@@ -272,80 +325,90 @@ async function handleApi(req, res, url) {
   const deleteFileMatch = url.pathname.match(/^\/api\/files\/([^/]+)$/);
   if (req.method === 'DELETE' && deleteFileMatch) {
     const fileId = deleteFileMatch[1];
-    const state = await readState();
-    for (const app of [...state.apps, ...state.trashApps]) {
-      const idx = app.workspaceFiles.findIndex((f) => f.id === fileId);
-      if (idx === -1) continue;
-      const [deleted] = app.workspaceFiles.splice(idx, 1);
-      await moveFileToTrashStorage(app.id, fileId);
-      state.trashFiles.unshift({
-        id: deleted.id,
-        appId: app.id,
-        name: deleted.name,
-        type: deleted.type || '',
-        size: Number.isFinite(deleted.size) ? deleted.size : null,
-        deletedAt: new Date().toISOString(),
-      });
-      const next = await writeState(state);
-      await logAction('file.delete', { appId: app.id, fileId, name: deleted?.name || '' });
-      return json(res, 200, { ok: true, state: next });
-    }
-    return notFound(res);
+    const outcome = await queueMutation(async () => {
+      const state = await readState();
+      for (const app of [...state.apps, ...state.trashApps]) {
+        const idx = app.workspaceFiles.findIndex((f) => f.id === fileId);
+        if (idx === -1) continue;
+        const [deleted] = app.workspaceFiles.splice(idx, 1);
+        await moveFileToTrashStorage(app.id, fileId);
+        state.trashFiles.unshift({
+          id: deleted.id,
+          appId: app.id,
+          name: deleted.name,
+          type: deleted.type || '',
+          size: Number.isFinite(deleted.size) ? deleted.size : null,
+          deletedAt: new Date().toISOString(),
+        });
+        const next = await writeState(state);
+        return { next, appId: app.id, deleted };
+      }
+      return null;
+    });
+    if (!outcome) return notFound(res);
+    await logAction('file.delete', { appId: outcome.appId, fileId, name: outcome.deleted?.name || '' });
+    return json(res, 200, { ok: true, state: outcome.next });
   }
 
   const restoreFileMatch = url.pathname.match(/^\/api\/files\/([^/]+)\/restore$/);
   if (req.method === 'POST' && restoreFileMatch) {
     const fileId = restoreFileMatch[1];
-    const body = await readBody(req);
+    const body = await readBody(req, MAX_JSON_BODY_BYTES);
     const targetAppId = str(body.appId);
-    const state = await readState();
-    const idx = state.trashFiles.findIndex((f) => f.id === fileId);
-    if (idx === -1) return notFound(res);
-    const file = state.trashFiles[idx];
-    const appId = targetAppId || file.appId;
-    const app = state.apps.find((a) => a.id === appId) || state.trashApps.find((a) => a.id === appId);
-    if (!app) return json(res, 400, { error: 'Target app not found for restore' });
-    const trashedPath = await findTrashedFilePath(file.appId, file.id);
-    if (!trashedPath || !fs.existsSync(trashedPath)) return json(res, 404, { error: 'Trashed file content not found' });
-    const dir = await ensureAppStorageDir(app.id);
-    const restoredPath = path.join(dir, `${file.id}-${safeFilename(file.name)}`);
-    await fsp.rename(trashedPath, restoredPath);
-    app.workspaceFiles.push({ id: file.id, name: file.name, type: file.type, size: file.size });
-    state.trashFiles.splice(idx, 1);
-    const next = await writeState(state);
-    await logAction('file.restore', { appId: app.id, fileId: file.id, name: file.name });
-    return json(res, 200, { ok: true, state: next });
+    const outcome = await queueMutation(async () => {
+      const state = await readState();
+      const idx = state.trashFiles.findIndex((f) => f.id === fileId);
+      if (idx === -1) return { error: 404, message: 'Not found' };
+      const file = state.trashFiles[idx];
+      const appId = targetAppId || file.appId;
+      const app = state.apps.find((a) => a.id === appId) || state.trashApps.find((a) => a.id === appId);
+      if (!app) return { error: 400, message: 'Target app not found for restore' };
+      const trashedPath = await findTrashedFilePath(file.appId, file.id);
+      if (!trashedPath || !fs.existsSync(trashedPath)) return { error: 404, message: 'Trashed file content not found' };
+      const dir = await ensureAppStorageDir(app.id);
+      const restoredPath = path.join(dir, `${file.id}-${safeFilename(file.name)}`);
+      await fsp.rename(trashedPath, restoredPath);
+      app.workspaceFiles.push({ id: file.id, name: file.name, type: file.type, size: file.size });
+      state.trashFiles.splice(idx, 1);
+      const next = await writeState(state);
+      return { next, appId: app.id, file };
+    });
+    if (outcome?.error) return json(res, outcome.error, { error: outcome.message });
+    await logAction('file.restore', { appId: outcome.appId, fileId: outcome.file.id, name: outcome.file.name });
+    return json(res, 200, { ok: true, state: outcome.next });
   }
 
   const purgeFileMatch = url.pathname.match(/^\/api\/files\/([^/]+)\/purge$/);
   if (req.method === 'DELETE' && purgeFileMatch) {
     const fileId = purgeFileMatch[1];
-    const state = await readState();
-
-    const tIdx = state.trashFiles.findIndex((f) => f.id === fileId);
-    if (tIdx !== -1) {
-      const file = state.trashFiles[tIdx];
-      const trashedPath = await findTrashedFilePath(file.appId, file.id);
-      if (trashedPath && fs.existsSync(trashedPath)) {
-        await fsp.unlink(trashedPath);
+    const outcome = await queueMutation(async () => {
+      const state = await readState();
+      const tIdx = state.trashFiles.findIndex((f) => f.id === fileId);
+      if (tIdx !== -1) {
+        const file = state.trashFiles[tIdx];
+        const trashedPath = await findTrashedFilePath(file.appId, file.id);
+        if (trashedPath && fs.existsSync(trashedPath)) {
+          await fsp.unlink(trashedPath);
+        }
+        state.trashFiles.splice(tIdx, 1);
+        const next = await writeState(state);
+        return { next, type: 'trash', appId: file.appId, name: file.name, id: file.id };
       }
-      state.trashFiles.splice(tIdx, 1);
-      const next = await writeState(state);
-      await logAction('file.purge.trash', { appId: file.appId, fileId: file.id, name: file.name });
-      return json(res, 200, { ok: true, state: next });
-    }
 
-    for (const app of [...state.apps, ...state.trashApps]) {
-      const idx = app.workspaceFiles.findIndex((f) => f.id === fileId);
-      if (idx === -1) continue;
-      const [deleted] = app.workspaceFiles.splice(idx, 1);
-      const fullPath = await findStoredFilePath(app.id, fileId);
-      if (fullPath && fs.existsSync(fullPath)) await fsp.unlink(fullPath);
-      const next = await writeState(state);
-      await logAction('file.purge', { appId: app.id, fileId, name: deleted?.name || '' });
-      return json(res, 200, { ok: true, state: next });
-    }
-    return notFound(res);
+      for (const app of [...state.apps, ...state.trashApps]) {
+        const idx = app.workspaceFiles.findIndex((f) => f.id === fileId);
+        if (idx === -1) continue;
+        const [deleted] = app.workspaceFiles.splice(idx, 1);
+        const fullPath = await findStoredFilePath(app.id, fileId);
+        if (fullPath && fs.existsSync(fullPath)) await fsp.unlink(fullPath);
+        const next = await writeState(state);
+        return { next, type: 'live', appId: app.id, name: deleted?.name || '', id: fileId };
+      }
+      return null;
+    });
+    if (!outcome) return notFound(res);
+    await logAction(outcome.type === 'trash' ? 'file.purge.trash' : 'file.purge', { appId: outcome.appId, fileId: outcome.id, name: outcome.name });
+    return json(res, 200, { ok: true, state: outcome.next });
   }
 
   if (req.method === 'GET' && url.pathname === '/api/export') {
@@ -358,7 +421,7 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === 'POST' && url.pathname === '/api/import') {
-    const body = await readBody(req);
+    const body = await readBody(req, MAX_JSON_BODY_BYTES);
     if (!body || typeof body !== 'object') {
       return json(res, 400, { error: 'Invalid import payload' });
     }
@@ -370,7 +433,10 @@ async function handleApi(req, res, url) {
       trashApps: Array.isArray(body.trashApps) ? body.trashApps : [],
       trashFiles: Array.isArray(body.trashFiles) ? body.trashFiles : [],
     });
-    const next = await writeState(imported);
+    if (imported.apps.length > MAX_APPS || imported.trashApps.length > MAX_APPS) {
+      return json(res, 400, { error: `Import too large (max ${MAX_APPS} apps per section)` });
+    }
+    const next = await queueMutation(async () => writeState(imported));
     await logAction('state.import', { apps: next.apps.length, trashApps: next.trashApps.length, trashFiles: next.trashFiles.length });
     return json(res, 200, { state: next });
   }
@@ -399,6 +465,9 @@ const server = http.createServer(async (req, res) => {
     }
     return await serveStatic(req, res, url);
   } catch (err) {
+    if (Number.isInteger(err?.statusCode) && err.statusCode >= 400 && err.statusCode < 500) {
+      return json(res, err.statusCode, { error: err.message || 'Request error' });
+    }
     return serverError(res, err);
   }
 });
