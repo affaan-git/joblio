@@ -22,8 +22,19 @@ const MAX_FILE_BYTES = Number(process.env.MAX_FILE_BYTES || 25 * 1024 * 1024);
 const MAX_APPS = Number(process.env.MAX_APPS || 10000);
 const LOG_ROTATE_BYTES = Number(process.env.LOG_ROTATE_BYTES || 5 * 1024 * 1024);
 const API_TOKEN = process.env.JOBLIO_API_TOKEN || '';
+const AUDIT_KEY = process.env.JOBLIO_AUDIT_KEY || '';
 const HEALTH_VERBOSE = process.env.JOBLIO_HEALTH_VERBOSE === '1';
 const ERROR_VERBOSE = process.env.JOBLIO_ERROR_VERBOSE === '1';
+const STRICT_MODE = process.env.JOBLIO_STRICT_MODE === '1';
+const ALLOW_REMOTE = process.env.JOBLIO_ALLOW_REMOTE === '1';
+const SNAPSHOT_DIR = path.join(DATA_DIR, 'snapshots');
+const MAX_SNAPSHOTS = Number(process.env.MAX_SNAPSHOTS || 20);
+const PURGE_MIN_AGE_SEC = Number(process.env.PURGE_MIN_AGE_SEC || 120);
+const RATE_WINDOW_MS = Number(process.env.RATE_WINDOW_MS || 60 * 1000);
+const RATE_MAX_WRITE = Number(process.env.RATE_MAX_WRITE || 180);
+const RATE_MAX_UPLOAD = Number(process.env.RATE_MAX_UPLOAD || 24);
+const RATE_MAX_DELETE = Number(process.env.RATE_MAX_DELETE || 120);
+const RATE_MAX_IMPORT = Number(process.env.RATE_MAX_IMPORT || 10);
 const SAFE_ID_RE = /^[a-zA-Z0-9_-]{6,100}$/;
 const ALLOWED_STATUS = new Set(['wishlist', 'in_progress', 'applied', 'interview', 'offer', 'rejected', 'closed']);
 const ALLOWED_THEME = new Set(['dark', 'light']);
@@ -31,6 +42,8 @@ const STORAGE_DIR_ABS = path.resolve(STORAGE_DIR);
 const TRASH_STORAGE_DIR_ABS = path.resolve(TRASH_STORAGE_DIR);
 const LOG_PATH = path.join(LOG_DIR, 'activity.log');
 const LOG_PREV_PATH = path.join(LOG_DIR, 'activity.log.1');
+const AUDIT_CHAIN_PATH = path.join(LOG_DIR, 'audit-chain.json');
+const rateBuckets = new Map();
 
 const DEFAULT_STATE = {
   version: 1,
@@ -45,12 +58,27 @@ const DEFAULT_STATE = {
 let writeQueue = Promise.resolve();
 let lastErrorMessage = '';
 let lastErrorAt = '';
+let auditIntegrity = {
+  ok: true,
+  checkedAt: '',
+  message: '',
+  entries: 0,
+};
+let lastAuditVerifyMs = 0;
 
 async function ensureDirs() {
+  validateStartupConfig();
   await fsp.mkdir(DATA_DIR, { recursive: true });
   await fsp.mkdir(STORAGE_DIR, { recursive: true });
   await fsp.mkdir(TRASH_STORAGE_DIR, { recursive: true });
   await fsp.mkdir(LOG_DIR, { recursive: true });
+  await fsp.mkdir(SNAPSHOT_DIR, { recursive: true });
+  await applyPathPerms(DATA_DIR, 0o700);
+  await applyPathPerms(STORAGE_DIR, 0o700);
+  await applyPathPerms(TRASH_STORAGE_DIR, 0o700);
+  await applyPathPerms(LOG_DIR, 0o700);
+  await applyPathPerms(SNAPSHOT_DIR, 0o700);
+  await verifyAuditLog();
   if (!fs.existsSync(STATE_PATH)) {
     await writeState(DEFAULT_STATE);
   }
@@ -58,8 +86,14 @@ async function ensureDirs() {
 
 async function logAction(action, detail = {}) {
   await rotateLogIfNeeded();
-  const line = `${new Date().toISOString()}\t${action}\t${JSON.stringify(detail)}\n`;
+  const chain = await readAuditChain();
+  const ts = new Date().toISOString();
+  const payload = { ts, action, detail };
+  const hash = computeAuditHash(chain.lastHash || '', payload);
+  const line = `${ts}\t${action}\t${JSON.stringify(detail)}\t${hash}\n`;
   await fsp.appendFile(LOG_PATH, line, 'utf8');
+  await applyPathPerms(LOG_PATH, 0o600);
+  await writeAuditChain({ lastHash: hash, entries: Number(chain.entries || 0) + 1, lastAt: ts });
 }
 
 async function rotateLogIfNeeded() {
@@ -70,7 +104,91 @@ async function rotateLogIfNeeded() {
       await fsp.unlink(LOG_PREV_PATH);
     } catch {}
     await fsp.rename(LOG_PATH, LOG_PREV_PATH);
+    await writeAuditChain({ lastHash: '', entries: 0, lastAt: '' });
   } catch {}
+}
+
+function validateStartupConfig() {
+  const hostLower = String(HOST || '').trim().toLowerCase();
+  const localhostHosts = new Set(['127.0.0.1', 'localhost', '::1']);
+  if (!ALLOW_REMOTE && !localhostHosts.has(hostLower)) {
+    throw new Error('Refusing non-local bind host. Set HOST=127.0.0.1 or JOBLIO_ALLOW_REMOTE=1.');
+  }
+  if (STRICT_MODE && !API_TOKEN) {
+    throw new Error('JOBLIO_STRICT_MODE=1 requires JOBLIO_API_TOKEN.');
+  }
+}
+
+async function applyPathPerms(targetPath, mode) {
+  try {
+    await fsp.chmod(targetPath, mode);
+  } catch {}
+}
+
+function computeAuditHash(prevHash, payload) {
+  const base = `${prevHash}|${JSON.stringify(payload)}`;
+  if (AUDIT_KEY) {
+    return crypto.createHmac('sha256', AUDIT_KEY).update(base).digest('hex');
+  }
+  return crypto.createHash('sha256').update(base).digest('hex');
+}
+
+async function readAuditChain() {
+  try {
+    const raw = await fsp.readFile(AUDIT_CHAIN_PATH, 'utf8');
+    const parsed = JSON.parse(raw);
+    return {
+      lastHash: str(parsed?.lastHash, 128),
+      entries: Number.isFinite(parsed?.entries) ? parsed.entries : 0,
+      lastAt: str(parsed?.lastAt, 64),
+    };
+  } catch {
+    return { lastHash: '', entries: 0, lastAt: '' };
+  }
+}
+
+async function writeAuditChain(next) {
+  const tmp = `${AUDIT_CHAIN_PATH}.tmp`;
+  await fsp.writeFile(tmp, JSON.stringify(next, null, 2), 'utf8');
+  await fsp.rename(tmp, AUDIT_CHAIN_PATH);
+  await applyPathPerms(AUDIT_CHAIN_PATH, 0o600);
+}
+
+async function verifyAuditLog() {
+  try {
+    if (!fs.existsSync(LOG_PATH)) {
+      auditIntegrity = { ok: true, checkedAt: new Date().toISOString(), message: 'No log yet', entries: 0 };
+      return;
+    }
+    const raw = await fsp.readFile(LOG_PATH, 'utf8');
+    const lines = raw.split('\n').filter(Boolean);
+    let prevHash = '';
+    let entries = 0;
+    for (const line of lines) {
+      const parts = line.split('\t');
+      if (parts.length < 4) throw new Error('Invalid audit line format');
+      const ts = parts[0];
+      const action = parts[1];
+      const detailRaw = parts.slice(2, parts.length - 1).join('\t');
+      const hash = parts[parts.length - 1];
+      const detail = JSON.parse(detailRaw);
+      const computed = computeAuditHash(prevHash, { ts, action, detail });
+      if (hash !== computed) throw new Error('Audit hash mismatch');
+      prevHash = hash;
+      entries += 1;
+    }
+    const chain = await readAuditChain();
+    if (chain.lastHash && chain.lastHash !== prevHash) {
+      throw new Error('Audit chain pointer mismatch');
+    }
+    auditIntegrity = { ok: true, checkedAt: new Date().toISOString(), message: '', entries };
+    lastAuditVerifyMs = Date.now();
+  } catch (err) {
+    auditIntegrity = { ok: false, checkedAt: new Date().toISOString(), message: err?.message || String(err), entries: 0 };
+    lastErrorMessage = auditIntegrity.message;
+    lastErrorAt = new Date().toISOString();
+    lastAuditVerifyMs = Date.now();
+  }
 }
 
 async function readState() {
@@ -79,17 +197,81 @@ async function readState() {
     const parsed = JSON.parse(raw);
     return sanitizeState(parsed);
   } catch {
+    const recovered = await recoverStateFromSnapshots();
+    if (recovered) {
+      await writeState(recovered, { skipSnapshot: true });
+      await logAction('state.recovered', { source: 'snapshot' });
+      return recovered;
+    }
     return { ...DEFAULT_STATE };
   }
 }
 
-async function writeState(next) {
+async function writeState(next, options = {}) {
   const clean = sanitizeState(next);
   clean.updatedAt = new Date().toISOString();
+  if (!options.skipSnapshot) {
+    await snapshotCurrentState();
+  }
   const tmp = `${STATE_PATH}.tmp`;
   await fsp.writeFile(tmp, JSON.stringify(clean, null, 2), 'utf8');
+  await applyPathPerms(tmp, 0o600);
   await fsp.rename(tmp, STATE_PATH);
+  await applyPathPerms(STATE_PATH, 0o600);
   return clean;
+}
+
+function snapshotStamp() {
+  const d = new Date();
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(d.getUTCDate()).padStart(2, '0');
+  const hh = String(d.getUTCHours()).padStart(2, '0');
+  const mi = String(d.getUTCMinutes()).padStart(2, '0');
+  const ss = String(d.getUTCSeconds()).padStart(2, '0');
+  return `${yyyy}${mm}${dd}-${hh}${mi}${ss}`;
+}
+
+async function snapshotCurrentState() {
+  try {
+    if (!fs.existsSync(STATE_PATH)) return;
+    const name = `state-${snapshotStamp()}.json`;
+    const outPath = path.join(SNAPSHOT_DIR, name);
+    await fsp.copyFile(STATE_PATH, outPath);
+    await applyPathPerms(outPath, 0o600);
+    await pruneSnapshots();
+  } catch {}
+}
+
+async function pruneSnapshots() {
+  try {
+    const files = (await fsp.readdir(SNAPSHOT_DIR))
+      .filter((f) => /^state-\d{8}-\d{6}\.json$/.test(f))
+      .sort();
+    if (files.length <= MAX_SNAPSHOTS) return;
+    const toDelete = files.slice(0, files.length - MAX_SNAPSHOTS);
+    await Promise.all(toDelete.map((f) => fsp.unlink(path.join(SNAPSHOT_DIR, f)).catch(() => {})));
+  } catch {}
+}
+
+async function recoverStateFromSnapshots() {
+  try {
+    const files = (await fsp.readdir(SNAPSHOT_DIR))
+      .filter((f) => /^state-\d{8}-\d{6}\.json$/.test(f))
+      .sort()
+      .reverse();
+    for (const file of files) {
+      try {
+        const raw = await fsp.readFile(path.join(SNAPSHOT_DIR, file), 'utf8');
+        const parsed = JSON.parse(raw);
+        const clean = sanitizeState(parsed);
+        if (Array.isArray(clean.apps) && Array.isArray(clean.trashApps)) return clean;
+      } catch {}
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 function queueMutation(fn) {
@@ -206,6 +388,12 @@ function dedupeById(items) {
   return out;
 }
 
+function ageSeconds(iso) {
+  const d = new Date(str(iso, 64));
+  if (Number.isNaN(d.getTime())) return Number.MAX_SAFE_INTEGER;
+  return Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000));
+}
+
 function storagePathForApp(appId) {
   if (!isSafeId(appId)) {
     const err = new Error('Invalid app id');
@@ -277,6 +465,46 @@ function isTrustedRequestOrigin(req) {
     }
   }
   // Allow non-browser clients (curl/scripts) with no origin headers.
+  return true;
+}
+
+function getClientIp(req) {
+  const xff = String(req.headers['x-forwarded-for'] || '').trim();
+  if (xff) return xff.split(',')[0].trim();
+  return String(req.socket?.remoteAddress || 'unknown');
+}
+
+function routeBucket(pathname, method) {
+  if (pathname === '/api/files/upload' && method === 'POST') return { key: 'upload', max: RATE_MAX_UPLOAD };
+  if (pathname === '/api/import' && method === 'POST') return { key: 'import', max: RATE_MAX_IMPORT };
+  if (pathname.startsWith('/api/files/') && method === 'DELETE') return { key: 'delete', max: RATE_MAX_DELETE };
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method || '')) return { key: 'write', max: RATE_MAX_WRITE };
+  return null;
+}
+
+function enforceRateLimit(req, res, pathname) {
+  const bucket = routeBucket(pathname, req.method || '');
+  if (!bucket) return true;
+  const now = Date.now();
+  if (rateBuckets.size > 5000) {
+    for (const [k, v] of rateBuckets.entries()) {
+      if (!v || now >= v.resetAt) rateBuckets.delete(k);
+    }
+  }
+  const ip = getClientIp(req);
+  const key = `${ip}:${bucket.key}`;
+  let entry = rateBuckets.get(key);
+  if (!entry || now >= entry.resetAt) {
+    entry = { count: 0, resetAt: now + RATE_WINDOW_MS };
+  }
+  entry.count += 1;
+  rateBuckets.set(key, entry);
+  if (entry.count > bucket.max) {
+    const retryAfterSec = Math.max(1, Math.ceil((entry.resetAt - now) / 1000));
+    res.setHeader('Retry-After', String(retryAfterSec));
+    json(res, 429, { error: 'Too many requests', retryAfterSec });
+    return false;
+  }
   return true;
 }
 
@@ -369,8 +597,12 @@ async function findTrashedFilePath(appId, fileId) {
 
 async function handleApi(req, res, url) {
   if (!requireWriteAuth(req, res)) return;
+  if (!enforceRateLimit(req, res, url.pathname)) return;
 
   if (req.method === 'GET' && url.pathname === '/api/health') {
+    if (Date.now() - lastAuditVerifyMs > 30000) {
+      await verifyAuditLog();
+    }
     const base = { ok: true, at: new Date().toISOString() };
     if (!HEALTH_VERBOSE) return json(res, 200, base);
     return json(res, 200, {
@@ -383,7 +615,14 @@ async function handleApi(req, res, url) {
         maxJsonBodyBytes: MAX_JSON_BODY_BYTES,
         maxUploadJsonBytes: MAX_UPLOAD_JSON_BYTES,
         maxFileBytes: MAX_FILE_BYTES,
+        purgeMinAgeSec: PURGE_MIN_AGE_SEC,
+        rateWindowMs: RATE_WINDOW_MS,
+        rateMaxWrite: RATE_MAX_WRITE,
+        rateMaxUpload: RATE_MAX_UPLOAD,
+        rateMaxDelete: RATE_MAX_DELETE,
+        rateMaxImport: RATE_MAX_IMPORT,
       },
+      audit: auditIntegrity,
     });
   }
 
@@ -546,6 +785,10 @@ async function handleApi(req, res, url) {
       const tIdx = state.trashFiles.findIndex((f) => f.id === fileId);
       if (tIdx !== -1) {
         const file = state.trashFiles[tIdx];
+        const ageSec = ageSeconds(file.deletedAt);
+        if (ageSec < PURGE_MIN_AGE_SEC) {
+          return { error: 409, message: `File can be permanently deleted in ${PURGE_MIN_AGE_SEC - ageSec}s` };
+        }
         const trashedPath = await findTrashedFilePath(file.appId, file.id);
         if (trashedPath && fs.existsSync(trashedPath)) {
           await fsp.unlink(trashedPath);
@@ -567,6 +810,7 @@ async function handleApi(req, res, url) {
       return null;
     });
     if (!outcome) return notFound(res);
+    if (outcome?.error) return json(res, outcome.error, { error: outcome.message });
     await logAction(outcome.type === 'trash' ? 'file.purge.trash' : 'file.purge', { appId: outcome.appId, fileId: outcome.id, name: outcome.name });
     return json(res, 200, { ok: true, state: outcome.next });
   }

@@ -22,19 +22,38 @@ Then open: `http://127.0.0.1:8787`
   - Set `JOBLIO_API_TOKEN=your-secret-token` before `npm start`
   - Client sends token using `localStorage["joblio-api-token"]`
   - Mutating API calls (`POST`/`PUT`/`DELETE`) require header `X-Joblio-Token`
+- Optional strict runtime mode:
+  - Set `JOBLIO_STRICT_MODE=1` to require `JOBLIO_API_TOKEN`
+  - Server refuses non-local bind host unless `JOBLIO_ALLOW_REMOTE=1`
 - Request/body limits are enforced server-side:
   - `MAX_JSON_BODY_BYTES` (default 5 MB)
   - `MAX_UPLOAD_JSON_BYTES` (default 35 MB)
   - `MAX_FILE_BYTES` (default 25 MB decoded file bytes)
   - `MAX_APPS` (default 10000)
+- Request rate limits are enforced per IP and route bucket:
+  - `RATE_WINDOW_MS` (default 60000)
+  - `RATE_MAX_WRITE` (default 180)
+  - `RATE_MAX_UPLOAD` (default 24)
+  - `RATE_MAX_DELETE` (default 120)
+  - `RATE_MAX_IMPORT` (default 10)
 - Storage safety:
   - IDs are validated
   - File paths are resolved and constrained to app/trash storage roots
+- State durability:
+  - Rolling snapshots in `.joblio-data/snapshots/` before writes
+  - Snapshot recovery attempted if `state.json` is unreadable
+  - `MAX_SNAPSHOTS` controls retention (default 20)
 - Response hardening headers are set (CSP, frame deny, nosniff, no-referrer, permissions policy).
 - Log rotation:
   - `activity.log` rotates to `activity.log.1` at `LOG_ROTATE_BYTES` (default 5 MB).
+- Tamper-evident audit chaining:
+  - Each audit entry includes a chained hash
+  - Optional HMAC signing with `JOBLIO_AUDIT_KEY`
+  - Integrity status appears in verbose health
 - Health endpoint details are minimal by default; set `JOBLIO_HEALTH_VERBOSE=1` for diagnostics.
 - `500` responses are generic by default; set `JOBLIO_ERROR_VERBOSE=1` for local debug details.
+- Permanent file purge delay:
+  - Files in trash require minimum age before purge (`PURGE_MIN_AGE_SEC`, default 120)
 
 ## API
 
