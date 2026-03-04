@@ -20,6 +20,17 @@ const MAX_JSON_BODY_BYTES = Number(process.env.MAX_JSON_BODY_BYTES || 5 * 1024 *
 const MAX_UPLOAD_JSON_BYTES = Number(process.env.MAX_UPLOAD_JSON_BYTES || 35 * 1024 * 1024);
 const MAX_FILE_BYTES = Number(process.env.MAX_FILE_BYTES || 25 * 1024 * 1024);
 const MAX_APPS = Number(process.env.MAX_APPS || 10000);
+const LOG_ROTATE_BYTES = Number(process.env.LOG_ROTATE_BYTES || 5 * 1024 * 1024);
+const API_TOKEN = process.env.JOBLIO_API_TOKEN || '';
+const HEALTH_VERBOSE = process.env.JOBLIO_HEALTH_VERBOSE === '1';
+const ERROR_VERBOSE = process.env.JOBLIO_ERROR_VERBOSE === '1';
+const SAFE_ID_RE = /^[a-zA-Z0-9_-]{6,100}$/;
+const ALLOWED_STATUS = new Set(['wishlist', 'in_progress', 'applied', 'interview', 'offer', 'rejected', 'closed']);
+const ALLOWED_THEME = new Set(['dark', 'light']);
+const STORAGE_DIR_ABS = path.resolve(STORAGE_DIR);
+const TRASH_STORAGE_DIR_ABS = path.resolve(TRASH_STORAGE_DIR);
+const LOG_PATH = path.join(LOG_DIR, 'activity.log');
+const LOG_PREV_PATH = path.join(LOG_DIR, 'activity.log.1');
 
 const DEFAULT_STATE = {
   version: 1,
@@ -46,8 +57,20 @@ async function ensureDirs() {
 }
 
 async function logAction(action, detail = {}) {
+  await rotateLogIfNeeded();
   const line = `${new Date().toISOString()}\t${action}\t${JSON.stringify(detail)}\n`;
-  await fsp.appendFile(path.join(LOG_DIR, 'activity.log'), line, 'utf8');
+  await fsp.appendFile(LOG_PATH, line, 'utf8');
+}
+
+async function rotateLogIfNeeded() {
+  try {
+    const stat = await fsp.stat(LOG_PATH);
+    if (stat.size < LOG_ROTATE_BYTES) return;
+    try {
+      await fsp.unlink(LOG_PREV_PATH);
+    } catch {}
+    await fsp.rename(LOG_PATH, LOG_PREV_PATH);
+  } catch {}
 }
 
 async function readState() {
@@ -79,8 +102,8 @@ function sanitizeState(input) {
   const base = input && typeof input === 'object' ? input : {};
   const out = {
     version: 1,
-    theme: base.theme === 'light' ? 'light' : 'dark',
-    activeId: typeof base.activeId === 'string' ? base.activeId : null,
+    theme: ALLOWED_THEME.has(base.theme) ? base.theme : 'dark',
+    activeId: isSafeId(base.activeId) ? base.activeId : null,
     apps: Array.isArray(base.apps) ? base.apps : [],
     trashApps: Array.isArray(base.trashApps) ? base.trashApps : [],
     trashFiles: Array.isArray(base.trashFiles) ? base.trashFiles : [],
@@ -89,65 +112,177 @@ function sanitizeState(input) {
   out.apps = out.apps.map(sanitizeApp).filter(Boolean);
   out.trashApps = out.trashApps.map(sanitizeApp).filter(Boolean);
   out.trashFiles = out.trashFiles.map(sanitizeTrashFile).filter(Boolean);
+  out.apps = dedupeById(out.apps);
+  out.trashApps = dedupeById(out.trashApps);
+  out.trashFiles = dedupeById(out.trashFiles);
+  out.apps.forEach((app) => {
+    app.workspaceFiles = dedupeById(Array.isArray(app.workspaceFiles) ? app.workspaceFiles : []);
+  });
+  out.trashApps.forEach((app) => {
+    app.workspaceFiles = dedupeById(Array.isArray(app.workspaceFiles) ? app.workspaceFiles : []);
+  });
+  out.trashFiles = out.trashFiles.filter((f) => f.appId);
   return out;
 }
 
 function sanitizeApp(app) {
   if (!app || typeof app !== 'object') return null;
-  const id = typeof app.id === 'string' && app.id ? app.id : crypto.randomUUID();
+  const id = isSafeId(app.id) ? app.id : crypto.randomUUID();
   return {
     id,
-    company: str(app.company),
-    title: str(app.title),
-    location: str(app.location),
-    workMode: str(app.workMode || 'Unknown'),
-    status: str(app.status || 'wishlist'),
-    statusHistory: Array.isArray(app.statusHistory) ? app.statusHistory.map((h) => ({ status: str(h?.status), at: str(h?.at) })).filter((h) => h.status) : [],
-    statusUpdatedAt: str(app.statusUpdatedAt),
-    appliedAt: str(app.appliedAt),
-    nextFollowUpAt: str(app.nextFollowUpAt),
-    jobUrl: str(app.jobUrl),
-    applicationUrl: str(app.applicationUrl),
-    note: str(app.note),
-    descriptionText: str(app.descriptionText || app.intakeText),
+    company: str(app.company, 180),
+    title: str(app.title, 180),
+    location: str(app.location, 180),
+    workMode: str(app.workMode || 'Unknown', 40),
+    status: normalizeStatus(app.status),
+    statusHistory: Array.isArray(app.statusHistory)
+      ? app.statusHistory
+          .map((h) => ({ status: normalizeStatus(h?.status), at: str(h?.at, 64) }))
+          .filter((h) => h.status)
+          .slice(0, 200)
+      : [],
+    statusUpdatedAt: str(app.statusUpdatedAt, 64),
+    appliedAt: str(app.appliedAt, 32),
+    nextFollowUpAt: str(app.nextFollowUpAt, 32),
+    jobUrl: str(app.jobUrl, 500),
+    applicationUrl: str(app.applicationUrl, 500),
+    note: str(app.note, 20000),
+    descriptionText: str(app.descriptionText || app.intakeText, 200000),
     workspaceFiles: Array.isArray(app.workspaceFiles)
       ? app.workspaceFiles
           .map((f) => {
             if (typeof f === 'string') return { id: crypto.randomUUID(), name: f, size: null, type: '' };
             if (!f || typeof f !== 'object') return null;
             return {
-              id: str(f.id) || crypto.randomUUID(),
-              name: str(f.name),
+              id: isSafeId(f.id) ? f.id : crypto.randomUUID(),
+              name: str(f.name, 255),
               size: Number.isFinite(f.size) ? f.size : null,
-              type: str(f.type),
+              type: str(f.type, 120),
             };
           })
           .filter(Boolean)
+          .slice(0, 200)
       : [],
-    createdAt: str(app.createdAt),
-    updatedAt: str(app.updatedAt),
-    deletedAt: str(app.deletedAt),
+    createdAt: str(app.createdAt, 64),
+    updatedAt: str(app.updatedAt, 64),
+    deletedAt: str(app.deletedAt, 64),
   };
 }
 
 function sanitizeTrashFile(file) {
   if (!file || typeof file !== 'object') return null;
   return {
-    id: str(file.id) || crypto.randomUUID(),
-    appId: str(file.appId),
-    name: str(file.name),
-    type: str(file.type),
+    id: isSafeId(file.id) ? file.id : crypto.randomUUID(),
+    appId: isSafeId(file.appId) ? file.appId : '',
+    name: str(file.name, 255),
+    type: str(file.type, 120),
     size: Number.isFinite(file.size) ? file.size : null,
-    deletedAt: str(file.deletedAt) || new Date().toISOString(),
+    deletedAt: str(file.deletedAt, 64) || new Date().toISOString(),
   };
 }
 
-function str(v) {
-  return typeof v === 'string' ? v : '';
+function str(v, maxLen = 4000) {
+  if (typeof v !== 'string') return '';
+  return v.length > maxLen ? v.slice(0, maxLen) : v;
+}
+
+function isSafeId(v) {
+  return typeof v === 'string' && SAFE_ID_RE.test(v);
+}
+
+function normalizeStatus(v) {
+  return ALLOWED_STATUS.has(v) ? v : 'wishlist';
+}
+
+function dedupeById(items) {
+  const seen = new Set();
+  const out = [];
+  for (const item of Array.isArray(items) ? items : []) {
+    const id = typeof item?.id === 'string' ? item.id : '';
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(item);
+  }
+  return out;
+}
+
+function storagePathForApp(appId) {
+  if (!isSafeId(appId)) {
+    const err = new Error('Invalid app id');
+    err.statusCode = 400;
+    throw err;
+  }
+  const resolved = path.resolve(path.join(STORAGE_DIR_ABS, appId));
+  if (!(resolved === STORAGE_DIR_ABS || resolved.startsWith(`${STORAGE_DIR_ABS}${path.sep}`))) {
+    const err = new Error('Invalid storage path');
+    err.statusCode = 400;
+    throw err;
+  }
+  return resolved;
+}
+
+function filePathInDir(dir, filename) {
+  const resolved = path.resolve(path.join(dir, filename));
+  if (!(resolved === dir || resolved.startsWith(`${dir}${path.sep}`))) {
+    const err = new Error('Invalid file path');
+    err.statusCode = 400;
+    throw err;
+  }
+  return resolved;
+}
+
+function applySecurityHeaders(res) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+}
+
+function requireWriteAuth(req, res) {
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method || '')) return true;
+  if (!isTrustedRequestOrigin(req)) {
+    json(res, 403, { error: 'Forbidden origin' });
+    return false;
+  }
+  if (!API_TOKEN) return true;
+  const supplied = req.headers['x-joblio-token'];
+  if (typeof supplied !== 'string' || supplied !== API_TOKEN) {
+    json(res, 401, { error: 'Unauthorized' });
+    return false;
+  }
+  return true;
+}
+
+function isTrustedRequestOrigin(req) {
+  const host = String(req.headers.host || '');
+  if (!host) return false;
+  const origin = String(req.headers.origin || '');
+  if (origin) {
+    try {
+      const u = new URL(origin);
+      return u.host === host;
+    } catch {
+      return false;
+    }
+  }
+  const referer = String(req.headers.referer || '');
+  if (referer) {
+    try {
+      const u = new URL(referer);
+      return u.host === host;
+    } catch {
+      return false;
+    }
+  }
+  // Allow non-browser clients (curl/scripts) with no origin headers.
+  return true;
 }
 
 function json(res, status, payload) {
   const body = JSON.stringify(payload);
+  applySecurityHeaders(res);
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
@@ -162,18 +297,21 @@ function notFound(res) {
 function serverError(res, err) {
   lastErrorMessage = err?.message || String(err);
   lastErrorAt = new Date().toISOString();
-  json(res, 500, { error: 'Server error', detail: err?.message || String(err) });
+  json(res, 500, ERROR_VERBOSE ? { error: 'Server error', detail: err?.message || String(err) } : { error: 'Server error' });
 }
 
 async function readBody(req, maxBytes = MAX_JSON_BODY_BYTES) {
   const chunks = [];
   let total = 0;
-  for await (const chunk of req) chunks.push(chunk);
-  for (const c of chunks) total += c.length;
-  if (total > maxBytes) {
-    const err = new Error(`Payload too large (${total} bytes)`);
-    err.statusCode = 413;
-    throw err;
+  for await (const chunk of req) {
+    total += chunk.length;
+    if (total > maxBytes) {
+      req.destroy();
+      const err = new Error(`Payload too large (${total} bytes)`);
+      err.statusCode = 413;
+      throw err;
+    }
+    chunks.push(chunk);
   }
   const raw = Buffer.concat(chunks).toString('utf8');
   if (!raw) return {};
@@ -191,17 +329,18 @@ function safeFilename(name) {
 }
 
 async function ensureAppStorageDir(appId) {
-  const dir = path.join(STORAGE_DIR, appId);
+  const dir = storagePathForApp(appId);
   await fsp.mkdir(dir, { recursive: true });
   return dir;
 }
 
 async function findStoredFilePath(appId, fileId) {
-  const dir = path.join(STORAGE_DIR, appId);
+  if (!isSafeId(fileId)) return null;
+  const dir = storagePathForApp(appId);
   try {
     const files = await fsp.readdir(dir);
     const found = files.find((name) => name.startsWith(`${fileId}-`));
-    return found ? path.join(dir, found) : null;
+    return found ? filePathInDir(dir, found) : null;
   } catch {
     return null;
   }
@@ -211,28 +350,33 @@ async function moveFileToTrashStorage(appId, fileId) {
   const fullPath = await findStoredFilePath(appId, fileId);
   if (!fullPath) return null;
   const base = path.basename(fullPath);
-  const trashPath = path.join(TRASH_STORAGE_DIR, `${appId}__${base}`);
+  const trashPath = filePathInDir(TRASH_STORAGE_DIR_ABS, `${appId}__${base}`);
   await fsp.rename(fullPath, trashPath);
   return trashPath;
 }
 
 async function findTrashedFilePath(appId, fileId) {
+  if (!isSafeId(appId) || !isSafeId(fileId)) return null;
   const prefix = `${appId}__${fileId}-`;
   try {
-    const files = await fsp.readdir(TRASH_STORAGE_DIR);
+    const files = await fsp.readdir(TRASH_STORAGE_DIR_ABS);
     const found = files.find((name) => name.startsWith(prefix));
-    return found ? path.join(TRASH_STORAGE_DIR, found) : null;
+    return found ? filePathInDir(TRASH_STORAGE_DIR_ABS, found) : null;
   } catch {
     return null;
   }
 }
 
 async function handleApi(req, res, url) {
+  if (!requireWriteAuth(req, res)) return;
+
   if (req.method === 'GET' && url.pathname === '/api/health') {
+    const base = { ok: true, at: new Date().toISOString() };
+    if (!HEALTH_VERBOSE) return json(res, 200, base);
     return json(res, 200, {
-      ok: true,
-      at: new Date().toISOString(),
+      ...base,
       uptimeSec: Math.floor(process.uptime()),
+      hasError: Boolean(lastErrorMessage),
       lastError: lastErrorMessage || null,
       lastErrorAt: lastErrorAt || null,
       limits: {
@@ -280,10 +424,20 @@ async function handleApi(req, res, url) {
     if (!appId || !fileName || !base64) {
       return json(res, 400, { error: 'appId, name, contentBase64 are required' });
     }
+    if (!isSafeId(appId)) {
+      return json(res, 400, { error: 'Invalid appId' });
+    }
+    const state = await readState();
+    if (!state.apps.some((a) => a.id === appId) && !state.trashApps.some((a) => a.id === appId)) {
+      return json(res, 400, { error: 'App not found for upload' });
+    }
     const id = crypto.randomUUID();
     const safeName = safeFilename(fileName);
     const dir = await ensureAppStorageDir(appId);
-    const filePath = path.join(dir, `${id}-${safeName}`);
+    const filePath = filePathInDir(dir, `${id}-${safeName}`);
+    if (!/^[a-zA-Z0-9+/=\r\n]+$/.test(base64)) {
+      return json(res, 400, { error: 'Invalid base64 file content' });
+    }
     const buffer = Buffer.from(base64, 'base64');
     if (buffer.byteLength > MAX_FILE_BYTES) {
       return json(res, 413, { error: `File too large (${buffer.byteLength} bytes). Limit: ${MAX_FILE_BYTES}` });
@@ -303,6 +457,7 @@ async function handleApi(req, res, url) {
   const downloadMatch = url.pathname.match(/^\/api\/files\/([^/]+)\/download$/);
   if (req.method === 'GET' && downloadMatch) {
     const fileId = downloadMatch[1];
+    if (!isSafeId(fileId)) return json(res, 400, { error: 'Invalid file id' });
     const state = await readState();
     let app = state.apps.find((a) => a.workspaceFiles.some((f) => f.id === fileId));
     if (!app) app = state.trashApps.find((a) => a.workspaceFiles.some((f) => f.id === fileId));
@@ -312,6 +467,7 @@ async function handleApi(req, res, url) {
     const fullPath = app ? await findStoredFilePath(app.id, fileId) : await findTrashedFilePath(trashFile.appId, fileId);
     if (!fullPath || !fs.existsSync(fullPath)) return notFound(res);
     const stat = await fsp.stat(fullPath);
+    applySecurityHeaders(res);
     res.writeHead(200, {
       'Content-Type': file.type || 'application/octet-stream',
       'Content-Length': stat.size,
@@ -325,6 +481,7 @@ async function handleApi(req, res, url) {
   const deleteFileMatch = url.pathname.match(/^\/api\/files\/([^/]+)$/);
   if (req.method === 'DELETE' && deleteFileMatch) {
     const fileId = deleteFileMatch[1];
+    if (!isSafeId(fileId)) return json(res, 400, { error: 'Invalid file id' });
     const outcome = await queueMutation(async () => {
       const state = await readState();
       for (const app of [...state.apps, ...state.trashApps]) {
@@ -353,6 +510,7 @@ async function handleApi(req, res, url) {
   const restoreFileMatch = url.pathname.match(/^\/api\/files\/([^/]+)\/restore$/);
   if (req.method === 'POST' && restoreFileMatch) {
     const fileId = restoreFileMatch[1];
+    if (!isSafeId(fileId)) return json(res, 400, { error: 'Invalid file id' });
     const body = await readBody(req, MAX_JSON_BODY_BYTES);
     const targetAppId = str(body.appId);
     const outcome = await queueMutation(async () => {
@@ -361,12 +519,13 @@ async function handleApi(req, res, url) {
       if (idx === -1) return { error: 404, message: 'Not found' };
       const file = state.trashFiles[idx];
       const appId = targetAppId || file.appId;
+      if (!isSafeId(appId)) return { error: 400, message: 'Invalid target app id' };
       const app = state.apps.find((a) => a.id === appId) || state.trashApps.find((a) => a.id === appId);
       if (!app) return { error: 400, message: 'Target app not found for restore' };
       const trashedPath = await findTrashedFilePath(file.appId, file.id);
       if (!trashedPath || !fs.existsSync(trashedPath)) return { error: 404, message: 'Trashed file content not found' };
       const dir = await ensureAppStorageDir(app.id);
-      const restoredPath = path.join(dir, `${file.id}-${safeFilename(file.name)}`);
+      const restoredPath = filePathInDir(dir, `${file.id}-${safeFilename(file.name)}`);
       await fsp.rename(trashedPath, restoredPath);
       app.workspaceFiles.push({ id: file.id, name: file.name, type: file.type, size: file.size });
       state.trashFiles.splice(idx, 1);
@@ -381,6 +540,7 @@ async function handleApi(req, res, url) {
   const purgeFileMatch = url.pathname.match(/^\/api\/files\/([^/]+)\/purge$/);
   if (req.method === 'DELETE' && purgeFileMatch) {
     const fileId = purgeFileMatch[1];
+    if (!isSafeId(fileId)) return json(res, 400, { error: 'Invalid file id' });
     const outcome = await queueMutation(async () => {
       const state = await readState();
       const tIdx = state.trashFiles.findIndex((f) => f.id === fileId);
@@ -450,6 +610,7 @@ async function serveStatic(req, res, url) {
   }
   if (url.pathname === '/' || url.pathname === '/Joblio.html') {
     const html = await fsp.readFile(APP_HTML, 'utf8');
+    applySecurityHeaders(res);
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(html);
     return;

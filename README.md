@@ -15,6 +15,27 @@ Then open: `http://127.0.0.1:8787`
 - Uploaded files on disk: `.joblio-data/storage/<appId>/...`
 - Activity log: `.joblio-data/logs/activity.log`
 
+## Security Hardening (v1)
+
+- All write endpoints enforce same-origin checks (`Origin`/`Referer` host must match server host when present).
+- Optional write auth token:
+  - Set `JOBLIO_API_TOKEN=your-secret-token` before `npm start`
+  - Client sends token using `localStorage["joblio-api-token"]`
+  - Mutating API calls (`POST`/`PUT`/`DELETE`) require header `X-Joblio-Token`
+- Request/body limits are enforced server-side:
+  - `MAX_JSON_BODY_BYTES` (default 5 MB)
+  - `MAX_UPLOAD_JSON_BYTES` (default 35 MB)
+  - `MAX_FILE_BYTES` (default 25 MB decoded file bytes)
+  - `MAX_APPS` (default 10000)
+- Storage safety:
+  - IDs are validated
+  - File paths are resolved and constrained to app/trash storage roots
+- Response hardening headers are set (CSP, frame deny, nosniff, no-referrer, permissions policy).
+- Log rotation:
+  - `activity.log` rotates to `activity.log.1` at `LOG_ROTATE_BYTES` (default 5 MB).
+- Health endpoint details are minimal by default; set `JOBLIO_HEALTH_VERBOSE=1` for diagnostics.
+- `500` responses are generic by default; set `JOBLIO_ERROR_VERBOSE=1` for local debug details.
+
 ## API
 
 - `GET /api/state`
