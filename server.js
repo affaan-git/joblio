@@ -7,6 +7,7 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { verifyPassword } = require('./lib/auth');
 
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 8787);
@@ -29,7 +30,7 @@ const MAX_APPS = Number(process.env.MAX_APPS || 10000);
 const LOG_ROTATE_BYTES = Number(process.env.LOG_ROTATE_BYTES || 5 * 1024 * 1024);
 const API_TOKEN = process.env.JOBLIO_API_TOKEN || '';
 const BASIC_AUTH_USER = process.env.JOBLIO_BASIC_AUTH_USER || '';
-const BASIC_AUTH_PASS = process.env.JOBLIO_BASIC_AUTH_PASS || '';
+const BASIC_AUTH_HASH = process.env.JOBLIO_BASIC_AUTH_HASH || '';
 const AUDIT_KEY = process.env.JOBLIO_AUDIT_KEY || '';
 const HEALTH_VERBOSE = process.env.JOBLIO_HEALTH_VERBOSE === '1';
 const ERROR_VERBOSE = process.env.JOBLIO_ERROR_VERBOSE === '1';
@@ -46,6 +47,7 @@ const RATE_MAX_IMPORT = Number(process.env.RATE_MAX_IMPORT || 10);
 const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 8 * 60 * 60 * 1000);
 const SESSION_ABS_TTL_MS = Number(process.env.SESSION_ABS_TTL_MS || 24 * 60 * 60 * 1000);
 const SESSION_COOKIE_NAME = 'joblio_sid';
+const SESSION_BINDING = process.env.JOBLIO_SESSION_BINDING || 'strict'; // strict | ip | ua | off
 const SAFE_ID_RE = /^[a-zA-Z0-9_-]{6,100}$/;
 const ALLOWED_STATUS = new Set(['wishlist', 'in_progress', 'applied', 'interview', 'offer', 'rejected', 'closed']);
 const ALLOWED_THEME = new Set(['dark', 'light']);
@@ -54,6 +56,7 @@ const TRASH_STORAGE_DIR_ABS = path.resolve(TRASH_STORAGE_DIR);
 const LOG_PATH = path.join(LOG_DIR, 'activity.log');
 const LOG_PREV_PATH = path.join(LOG_DIR, 'activity.log.1');
 const AUDIT_CHAIN_PATH = path.join(LOG_DIR, 'audit-chain.json');
+const SESSION_STORE_PATH = path.join(DATA_DIR, 'sessions.enc');
 const rateBuckets = new Map();
 const sessions = new Map();
 
@@ -78,6 +81,7 @@ let auditIntegrity = {
 };
 let lastAuditVerifyMs = 0;
 let transportIsTls = false;
+let sessionEpoch = 0;
 
 async function ensureDirs() {
   validateStartupConfig();
@@ -93,6 +97,7 @@ async function ensureDirs() {
   await applyPathPerms(LOG_DIR, 0o700);
   await applyPathPerms(SNAPSHOT_DIR, 0o700);
   await verifyAuditLog();
+  await loadSessionStore();
   if (!fs.existsSync(STATE_PATH)) {
     await writeState(DEFAULT_STATE);
   }
@@ -108,6 +113,20 @@ async function logAction(action, detail = {}) {
   await fsp.appendFile(LOG_PATH, line, 'utf8');
   await applyPathPerms(LOG_PATH, 0o600);
   await writeAuditChain({ lastHash: hash, entries: Number(chain.entries || 0) + 1, lastAt: ts });
+}
+
+async function securityEvent(type, detail = {}, level = 'warn') {
+  try {
+    await logAction(`security.${type}`, detail);
+  } catch {}
+  const line = `[security:${level}] ${type} ${JSON.stringify(detail)}`;
+  if (level === 'error') {
+    // eslint-disable-next-line no-console
+    console.error(line);
+  } else {
+    // eslint-disable-next-line no-console
+    console.warn(line);
+  }
 }
 
 async function rotateLogIfNeeded() {
@@ -131,8 +150,14 @@ function validateStartupConfig() {
   if (STRICT_MODE && !API_TOKEN) {
     throw new Error('JOBLIO_STRICT_MODE=1 requires JOBLIO_API_TOKEN.');
   }
-  if (STRICT_MODE && (!BASIC_AUTH_USER || !BASIC_AUTH_PASS)) {
-    throw new Error('JOBLIO_STRICT_MODE=1 requires JOBLIO_BASIC_AUTH_USER and JOBLIO_BASIC_AUTH_PASS.');
+  if (STRICT_MODE && (!BASIC_AUTH_USER || !BASIC_AUTH_HASH)) {
+    throw new Error('JOBLIO_STRICT_MODE=1 requires JOBLIO_BASIC_AUTH_USER and JOBLIO_BASIC_AUTH_HASH.');
+  }
+  if (BASIC_AUTH_HASH && !String(BASIC_AUTH_HASH).startsWith('scrypt$')) {
+    throw new Error('JOBLIO_BASIC_AUTH_HASH must be in scrypt$... format. Use: npm run auth:hash -- --password <pass>');
+  }
+  if (!new Set(['strict', 'ip', 'ua', 'off']).has(SESSION_BINDING)) {
+    throw new Error('JOBLIO_SESSION_BINDING must be one of: strict, ip, ua, off');
   }
   if (!new Set(['off', 'on', 'require']).has(TLS_MODE)) {
     throw new Error('JOBLIO_TLS_MODE must be one of: off, on, require');
@@ -216,6 +241,75 @@ async function verifyAuditLog() {
     lastErrorMessage = auditIntegrity.message;
     lastErrorAt = new Date().toISOString();
     lastAuditVerifyMs = Date.now();
+  }
+}
+
+function sessionStoreKey() {
+  return crypto.createHash('sha256').update(`${API_TOKEN}:session-store`).digest();
+}
+
+function encryptSessionStore(payloadObj) {
+  const key = sessionStoreKey();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const plaintext = Buffer.from(JSON.stringify(payloadObj), 'utf8');
+  const enc = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return JSON.stringify({
+    v: 1,
+    iv: iv.toString('base64'),
+    tag: tag.toString('base64'),
+    data: enc.toString('base64'),
+  });
+}
+
+function decryptSessionStore(raw) {
+  const parsed = JSON.parse(raw);
+  if (parsed?.v !== 1) throw new Error('Unsupported session store version');
+  const key = sessionStoreKey();
+  const iv = Buffer.from(String(parsed.iv || ''), 'base64');
+  const tag = Buffer.from(String(parsed.tag || ''), 'base64');
+  const data = Buffer.from(String(parsed.data || ''), 'base64');
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(tag);
+  const dec = Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8');
+  return JSON.parse(dec);
+}
+
+async function loadSessionStore() {
+  try {
+    if (!fs.existsSync(SESSION_STORE_PATH)) return;
+    const raw = await fsp.readFile(SESSION_STORE_PATH, 'utf8');
+    const parsed = decryptSessionStore(raw);
+    sessionEpoch = Number.isFinite(parsed?.epoch) ? parsed.epoch : 0;
+    sessions.clear();
+    const arr = Array.isArray(parsed?.sessions) ? parsed.sessions : [];
+    for (const entry of arr) {
+      if (!entry || typeof entry !== 'object') continue;
+      if (!entry.sid || typeof entry.sid !== 'string') continue;
+      sessions.set(entry.sid, entry);
+    }
+    pruneExpiredSessions();
+  } catch (err) {
+    await securityEvent('session_store_load_failed', { message: err?.message || String(err) }, 'error');
+  }
+}
+
+async function persistSessionStore() {
+  try {
+    const payload = {
+      epoch: sessionEpoch,
+      sessions: [...sessions.values()],
+      updatedAt: new Date().toISOString(),
+    };
+    const enc = encryptSessionStore(payload);
+    const tmp = `${SESSION_STORE_PATH}.tmp`;
+    await fsp.writeFile(tmp, enc, 'utf8');
+    await applyPathPerms(tmp, 0o600);
+    await fsp.rename(tmp, SESSION_STORE_PATH);
+    await applyPathPerms(SESSION_STORE_PATH, 0o600);
+  } catch (err) {
+    await securityEvent('session_store_persist_failed', { message: err?.message || String(err) }, 'error');
   }
 }
 
@@ -471,7 +565,7 @@ function requireWriteAuth(req, res) {
 
 function hasValidBasicAuth(req) {
   if (!STRICT_MODE) return true;
-  if (!BASIC_AUTH_USER || !BASIC_AUTH_PASS) return false;
+  if (!BASIC_AUTH_USER || !BASIC_AUTH_HASH) return false;
   const auth = String(req.headers.authorization || '');
   if (!auth.startsWith('Basic ')) return false;
   try {
@@ -480,7 +574,8 @@ function hasValidBasicAuth(req) {
     if (idx < 0) return false;
     const user = decoded.slice(0, idx);
     const pass = decoded.slice(idx + 1);
-    return user === BASIC_AUTH_USER && pass === BASIC_AUTH_PASS;
+    if (user !== BASIC_AUTH_USER) return false;
+    return verifyPassword(pass, BASIC_AUTH_HASH);
   } catch {
     return false;
   }
@@ -488,6 +583,7 @@ function hasValidBasicAuth(req) {
 
 function requireBasicAuth(req, res) {
   if (hasValidBasicAuth(req)) return true;
+  securityEvent('basic_auth_failed', { ip: getClientIp(req), path: req.url || '', method: req.method || '' }, 'warn');
   applySecurityHeaders(res);
   res.setHeader('WWW-Authenticate', 'Basic realm="Joblio", charset="UTF-8"');
   res.writeHead(401, {
@@ -542,6 +638,15 @@ function hashSessionParts(...parts) {
   return crypto.createHmac('sha256', API_TOKEN).update(parts.join('|')).digest('hex');
 }
 
+function sessionBindingMaterial(req) {
+  const ua = str(req.headers['user-agent'], 300);
+  const ip = getClientIp(req);
+  if (SESSION_BINDING === 'off') return '';
+  if (SESSION_BINDING === 'ip') return `ip:${ip}`;
+  if (SESSION_BINDING === 'ua') return `ua:${ua}`;
+  return `ua:${ua}|ip:${ip}`;
+}
+
 function makeSetCookie(value, maxAgeSec) {
   const attrs = [`${SESSION_COOKIE_NAME}=${encodeURIComponent(value)}`, 'Path=/', 'HttpOnly', 'SameSite=Strict', `Max-Age=${maxAgeSec}`];
   if (reqIsTlsExpected()) attrs.push('Secure');
@@ -556,37 +661,41 @@ function createSessionRecord(req) {
   const sid = crypto.randomUUID();
   const now = Date.now();
   const createdAt = new Date(now).toISOString();
-  const ua = str(req.headers['user-agent'], 300);
-  const ip = getClientIp(req);
-  const sig = hashSessionParts(sid, createdAt, ua, ip);
-  const csrfToken = hashSessionParts('csrf', sid, createdAt, ua, ip).slice(0, 48);
+  const binding = sessionBindingMaterial(req);
+  const sig = hashSessionParts(sid, createdAt, binding);
+  const csrfToken = hashSessionParts('csrf', sid, createdAt, binding).slice(0, 48);
   const record = {
     sid,
     sig,
     csrfToken,
     createdAt,
     lastSeenAt: createdAt,
-    ua,
-    ip,
+    binding,
+    epoch: sessionEpoch,
   };
   sessions.set(sid, record);
   pruneExpiredSessions();
+  persistSessionStore();
   return record;
 }
 
 function pruneExpiredSessions() {
   const now = Date.now();
+  let changed = false;
   for (const [sid, session] of sessions.entries()) {
     const createdMs = Date.parse(session.createdAt);
     const lastMs = Date.parse(session.lastSeenAt);
     if (!Number.isFinite(createdMs) || !Number.isFinite(lastMs)) {
       sessions.delete(sid);
+      changed = true;
       continue;
     }
     if (now - createdMs > SESSION_ABS_TTL_MS || now - lastMs > SESSION_TTL_MS) {
       sessions.delete(sid);
+      changed = true;
     }
   }
+  if (changed) persistSessionStore();
 }
 
 function getSessionFromRequest(req) {
@@ -596,14 +705,20 @@ function getSessionFromRequest(req) {
   if (!sid) return null;
   const rec = sessions.get(sid);
   if (!rec) return null;
-  const ua = str(req.headers['user-agent'], 300);
-  const ip = getClientIp(req);
-  const expectedSig = hashSessionParts(rec.sid, rec.createdAt, ua, ip);
+  if (Number(rec.epoch || 0) !== sessionEpoch) {
+    sessions.delete(sid);
+    securityEvent('session_epoch_mismatch', { sid }, 'warn');
+    return null;
+  }
+  const binding = sessionBindingMaterial(req);
+  const expectedSig = hashSessionParts(rec.sid, rec.createdAt, binding);
   if (rec.sig !== expectedSig) {
     sessions.delete(sid);
+    securityEvent('session_signature_mismatch', { sid }, 'warn');
     return null;
   }
   rec.lastSeenAt = new Date().toISOString();
+  rec.binding = binding;
   sessions.set(sid, rec);
   return rec;
 }
@@ -611,6 +726,7 @@ function getSessionFromRequest(req) {
 function requireApiSession(req, res) {
   const session = getSessionFromRequest(req);
   if (session) return session;
+  securityEvent('api_session_missing_or_invalid', { ip: getClientIp(req), path: req.url || '', method: req.method || '' }, 'warn');
   json(res, 401, { error: 'Unauthorized' });
   return null;
 }
@@ -618,6 +734,7 @@ function requireApiSession(req, res) {
 function requireCsrf(req, res, session) {
   const header = str(req.headers['x-joblio-csrf'], 120);
   if (header && header === session.csrfToken) return true;
+  securityEvent('csrf_invalid', { ip: getClientIp(req), path: req.url || '', method: req.method || '' }, 'warn');
   json(res, 403, { error: 'Invalid CSRF token' });
   return false;
 }
@@ -655,6 +772,7 @@ function enforceRateLimit(req, res, pathname) {
   rateBuckets.set(key, entry);
   if (entry.count > bucket.max) {
     const retryAfterSec = Math.max(1, Math.ceil((entry.resetAt - now) / 1000));
+    securityEvent('rate_limit_exceeded', { ip, bucket: bucket.key, count: entry.count, max: bucket.max }, 'warn');
     res.setHeader('Retry-After', String(retryAfterSec));
     json(res, 429, { error: 'Too many requests', retryAfterSec });
     return false;
@@ -773,8 +891,18 @@ async function handleApi(req, res, url) {
 
   if (req.method === 'POST' && url.pathname === '/api/auth/logout') {
     sessions.delete(session.sid);
+    persistSessionStore();
     res.setHeader('Set-Cookie', makeSetCookie('', 0));
     return json(res, 200, { ok: true, at: new Date().toISOString() });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/auth/revoke-all') {
+    sessionEpoch += 1;
+    sessions.clear();
+    await persistSessionStore();
+    res.setHeader('Set-Cookie', makeSetCookie('', 0));
+    await securityEvent('sessions_revoked_all', { bySid: session.sid, epoch: sessionEpoch }, 'warn');
+    return json(res, 200, { ok: true, epoch: sessionEpoch, at: new Date().toISOString() });
   }
 
   if (req.method === 'GET' && url.pathname === '/api/health') {
@@ -801,6 +929,9 @@ async function handleApi(req, res, url) {
         rateMaxUpload: RATE_MAX_UPLOAD,
         rateMaxDelete: RATE_MAX_DELETE,
         rateMaxImport: RATE_MAX_IMPORT,
+        sessionTtlMs: SESSION_TTL_MS,
+        sessionAbsTtlMs: SESSION_ABS_TTL_MS,
+        sessionBinding: SESSION_BINDING,
       },
       audit: auditIntegrity,
     });

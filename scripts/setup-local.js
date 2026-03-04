@@ -3,7 +3,9 @@
 
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
+const fs = require('node:fs');
 const path = require('node:path');
+const { createPasswordHash } = require('../lib/auth');
 
 const root = path.resolve(__dirname, '..');
 
@@ -19,11 +21,23 @@ const env = {
   ...process.env,
   JOBLIO_API_TOKEN: process.env.JOBLIO_API_TOKEN || randomHex(24),
   JOBLIO_BASIC_AUTH_USER: process.env.JOBLIO_BASIC_AUTH_USER || 'joblio',
-  JOBLIO_BASIC_AUTH_PASS: process.env.JOBLIO_BASIC_AUTH_PASS || randomPass(24),
+  JOBLIO_BASIC_AUTH_HASH: process.env.JOBLIO_BASIC_AUTH_HASH || '',
   JOBLIO_STRICT_MODE: process.env.JOBLIO_STRICT_MODE || '1',
   HOST: process.env.HOST || '127.0.0.1',
   PORT: process.env.PORT || '8787',
 };
+const plainPass = process.env.JOBLIO_BASIC_AUTH_PASS || randomPass(24);
+if (!env.JOBLIO_BASIC_AUTH_HASH) {
+  env.JOBLIO_BASIC_AUTH_HASH = createPasswordHash(plainPass);
+}
+
+const tlsDirCert = path.join(root, '.joblio-data', 'tls', 'localhost-cert.pem');
+const tlsDirKey = path.join(root, '.joblio-data', 'tls', 'localhost-key.pem');
+if (!process.env.JOBLIO_TLS_MODE && fs.existsSync(tlsDirCert) && fs.existsSync(tlsDirKey)) {
+  env.JOBLIO_TLS_MODE = 'require';
+  env.JOBLIO_TLS_CERT_PATH = tlsDirCert;
+  env.JOBLIO_TLS_KEY_PATH = tlsDirKey;
+}
 
 const preflight = spawn(process.execPath, ['./scripts/preflight.js'], {
   cwd: root,
@@ -41,9 +55,13 @@ preflight.on('exit', (code) => {
   // eslint-disable-next-line no-console
   console.log(`Browser auth user: ${env.JOBLIO_BASIC_AUTH_USER}`);
   // eslint-disable-next-line no-console
-  console.log(`Browser auth pass: ${env.JOBLIO_BASIC_AUTH_PASS}`);
+  console.log(`Browser auth pass: ${plainPass}`);
   // eslint-disable-next-line no-console
   console.log('Session authentication is automatic after browser login.');
+  if (env.JOBLIO_TLS_MODE === 'require' || env.JOBLIO_TLS_MODE === 'on') {
+    // eslint-disable-next-line no-console
+    console.log(`TLS mode: ${env.JOBLIO_TLS_MODE}`);
+  }
   // eslint-disable-next-line no-console
   console.log('');
 

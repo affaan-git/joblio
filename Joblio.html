@@ -1025,6 +1025,7 @@
       <div class="action-menu-wrap">
         <button id="dataBtn" class="btn" title="Import / export" aria-label="Open import and export actions">☰</button>
         <div id="dataMenu" class="action-menu">
+          <button id="revokeSessionsBtn">Revoke all sessions</button>
           <button id="resumeTemplateBtn">Resume template</button>
           <button id="exportBtn">Export JSON</button>
           <button id="importBtn">Import JSON</button>
@@ -1208,6 +1209,7 @@
     const trashBtn = document.getElementById("trashBtn");
     const exportBtn = document.getElementById("exportBtn");
     const importBtn = document.getElementById("importBtn");
+    const revokeSessionsBtn = document.getElementById("revokeSessionsBtn");
     const resumeTemplateBtn = document.getElementById("resumeTemplateBtn");
     const importInput = document.getElementById("importInput");
 
@@ -2652,6 +2654,18 @@
     exportBtn.addEventListener("click", () => {
       dataMenu.classList.remove("open");
       exportTrackerData();
+    });
+    revokeSessionsBtn.addEventListener("click", async () => {
+      dataMenu.classList.remove("open");
+      const ok = window.confirm("Revoke all active sessions now?");
+      if (!ok) return;
+      try {
+        await requestJSON("/api/auth/revoke-all", { method: "POST", body: JSON.stringify({}) });
+        showToast("All sessions revoked. Reload and sign in again.", "warn");
+        setTimeout(() => window.location.reload(), 700);
+      } catch {
+        showToast("Could not revoke sessions.", "error");
+      }
     });
     backendHealth.style.cursor = "pointer";
     backendHealth.addEventListener("click", async () => {

@@ -7,6 +7,10 @@
     "preflight": "node ./scripts/preflight.js",
     "start": "npm run preflight && node server.js",
     "start:secure": "node ./scripts/setup-local.js",
+    "auth:hash": "node ./scripts/gen-auth-hash.js",
+    "tls:gen": "node ./scripts/gen-local-tls.js",
+    "test:security": "node --test ./scripts/security-tests.js",
+    "validate:release": "node ./scripts/validate-release.js",
     "smoke": "node ./scripts/smoke-test.js",
     "backup": "node ./scripts/backup.js",
     "restore": "node ./scripts/restore.js"

@@ -10,7 +10,7 @@ const strictMode = process.env.JOBLIO_STRICT_MODE !== '0';
 const allowRemote = process.env.JOBLIO_ALLOW_REMOTE === '1';
 const token = process.env.JOBLIO_API_TOKEN || '';
 const basicUser = process.env.JOBLIO_BASIC_AUTH_USER || '';
-const basicPass = process.env.JOBLIO_BASIC_AUTH_PASS || '';
+const basicHash = process.env.JOBLIO_BASIC_AUTH_HASH || '';
 const tlsMode = process.env.JOBLIO_TLS_MODE || 'off';
 const tlsCert = process.env.JOBLIO_TLS_CERT_PATH || '';
 const tlsKey = process.env.JOBLIO_TLS_KEY_PATH || '';
@@ -28,8 +28,11 @@ if (!allowRemote && !localhostHosts.has(String(host).trim().toLowerCase())) {
 if (strictMode && !token) {
   issues.push('JOBLIO_API_TOKEN is required when strict mode is enabled (default).');
 }
-if (strictMode && (!basicUser || !basicPass)) {
-  issues.push('JOBLIO_BASIC_AUTH_USER and JOBLIO_BASIC_AUTH_PASS are required when strict mode is enabled (default).');
+if (strictMode && (!basicUser || !basicHash)) {
+  issues.push('JOBLIO_BASIC_AUTH_USER and JOBLIO_BASIC_AUTH_HASH are required when strict mode is enabled (default).');
+}
+if (process.env.JOBLIO_BASIC_AUTH_PASS) {
+  warns.push('JOBLIO_BASIC_AUTH_PASS is ignored by server; use JOBLIO_BASIC_AUTH_HASH.');
 }
 
 if (!new Set(['off', 'on', 'require']).has(tlsMode)) {

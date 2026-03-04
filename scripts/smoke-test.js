@@ -3,6 +3,7 @@
 
 const { spawn } = require('node:child_process');
 const path = require('node:path');
+const { createPasswordHash } = require('../lib/auth');
 
 const root = path.resolve(__dirname, '..');
 const port = Number(process.env.SMOKE_PORT || 8799);
@@ -55,7 +56,7 @@ async function waitForServer(timeoutMs = 8000) {
     JOBLIO_STRICT_MODE: '1',
     JOBLIO_API_TOKEN: token,
     JOBLIO_BASIC_AUTH_USER: basicUser,
-    JOBLIO_BASIC_AUTH_PASS: basicPass,
+    JOBLIO_BASIC_AUTH_HASH: createPasswordHash(basicPass),
     PURGE_MIN_AGE_SEC: '0',
     JOBLIO_HEALTH_VERBOSE: '1',
   };
@@ -141,6 +142,15 @@ async function waitForServer(timeoutMs = 8000) {
 
     r = await req(`${base}/api/integrity/verify`);
     if (!r.res.ok || typeof r.body?.ok !== 'boolean') throw new Error('Integrity verify failed');
+
+    r = await req(`${base}/api/auth/revoke-all`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-joblio-csrf': csrfToken },
+      body: JSON.stringify({}),
+    });
+    if (!r.res.ok || !r.body?.ok) throw new Error('Revoke-all failed');
+    r = await req(`${base}/api/state`);
+    if (r.res.status !== 401) throw new Error('Expected session invalidation after revoke-all');
 
     console.log('Smoke test OK');
     cleanup();
