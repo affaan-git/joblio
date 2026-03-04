@@ -25,7 +25,7 @@ const API_TOKEN = process.env.JOBLIO_API_TOKEN || '';
 const AUDIT_KEY = process.env.JOBLIO_AUDIT_KEY || '';
 const HEALTH_VERBOSE = process.env.JOBLIO_HEALTH_VERBOSE === '1';
 const ERROR_VERBOSE = process.env.JOBLIO_ERROR_VERBOSE === '1';
-const STRICT_MODE = process.env.JOBLIO_STRICT_MODE === '1';
+const STRICT_MODE = process.env.JOBLIO_STRICT_MODE !== '0';
 const ALLOW_REMOTE = process.env.JOBLIO_ALLOW_REMOTE === '1';
 const SNAPSHOT_DIR = path.join(DATA_DIR, 'snapshots');
 const MAX_SNAPSHOTS = Number(process.env.MAX_SNAPSHOTS || 20);
@@ -425,6 +425,7 @@ function applySecurityHeaders(res) {
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
 }
 
@@ -876,6 +877,10 @@ const server = http.createServer(async (req, res) => {
     return serverError(res, err);
   }
 });
+server.requestTimeout = 15000;
+server.headersTimeout = 15000;
+server.keepAliveTimeout = 5000;
+server.maxHeadersCount = 100;
 
 ensureDirs()
   .then(() => {

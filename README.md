@@ -22,9 +22,11 @@ Then open: `http://127.0.0.1:8787`
   - Set `JOBLIO_API_TOKEN=your-secret-token` before `npm start`
   - Client sends token using `localStorage["joblio-api-token"]`
   - Mutating API calls (`POST`/`PUT`/`DELETE`) require header `X-Joblio-Token`
-- Optional strict runtime mode:
-  - Set `JOBLIO_STRICT_MODE=1` to require `JOBLIO_API_TOKEN`
+- Strict runtime mode is enabled by default:
+  - `JOBLIO_STRICT_MODE=1` behavior is default (`JOBLIO_STRICT_MODE=0` disables)
+  - Requires `JOBLIO_API_TOKEN` for startup in strict mode
   - Server refuses non-local bind host unless `JOBLIO_ALLOW_REMOTE=1`
+  - UI can set token locally from Data menu (`Set API token`)
 - Request/body limits are enforced server-side:
   - `MAX_JSON_BODY_BYTES` (default 5 MB)
   - `MAX_UPLOAD_JSON_BYTES` (default 35 MB)
@@ -54,6 +56,8 @@ Then open: `http://127.0.0.1:8787`
 - `500` responses are generic by default; set `JOBLIO_ERROR_VERBOSE=1` for local debug details.
 - Permanent file purge delay:
   - Files in trash require minimum age before purge (`PURGE_MIN_AGE_SEC`, default 120)
+- HTTP server hardening:
+  - request timeout 15s, headers timeout 15s, keepalive timeout 5s
 
 ## API
 

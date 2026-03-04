@@ -1025,6 +1025,8 @@
       <div class="action-menu-wrap">
         <button id="dataBtn" class="btn" title="Import / export" aria-label="Open import and export actions">☰</button>
         <div id="dataMenu" class="action-menu">
+          <button id="setTokenBtn">Set API token</button>
+          <button id="clearTokenBtn">Clear API token</button>
           <button id="exportBtn">Export JSON</button>
           <button id="importBtn">Import JSON</button>
         </div>
@@ -1197,6 +1199,8 @@
     const trashBtn = document.getElementById("trashBtn");
     const exportBtn = document.getElementById("exportBtn");
     const importBtn = document.getElementById("importBtn");
+    const setTokenBtn = document.getElementById("setTokenBtn");
+    const clearTokenBtn = document.getElementById("clearTokenBtn");
     const importInput = document.getElementById("importInput");
 
     const newBtn = document.getElementById("newBtn");
@@ -1352,6 +1356,33 @@
       }, 3000);
     }
 
+    function getApiToken() {
+      return localStorage.getItem(API_TOKEN_KEY) || "";
+    }
+
+    function setApiToken(token) {
+      const clean = String(token || "").trim();
+      if (!clean) {
+        localStorage.removeItem(API_TOKEN_KEY);
+        return;
+      }
+      localStorage.setItem(API_TOKEN_KEY, clean);
+    }
+
+    function tokenMask(token) {
+      const t = String(token || "");
+      if (!t) return "No API token";
+      if (t.length <= 8) return "API token set";
+      return `API token: ${t.slice(0, 4)}...${t.slice(-3)}`;
+    }
+
+    function syncTokenButtons() {
+      const token = getApiToken();
+      setTokenBtn.textContent = token ? `Update token (${tokenMask(token)})` : "Set API token";
+      clearTokenBtn.disabled = !token;
+      clearTokenBtn.style.opacity = token ? "1" : "0.55";
+    }
+
     function scheduleSavedToast() {
       if (saveToastTimer) clearTimeout(saveToastTimer);
       saveToastTimer = setTimeout(() => {
@@ -1386,7 +1417,7 @@
     }
 
     async function requestJSON(path, options = {}) {
-      const apiToken = localStorage.getItem(API_TOKEN_KEY);
+      const apiToken = getApiToken();
       const res = await fetch(`${API_BASE}${path}`, {
         ...options,
         headers: {
@@ -1396,8 +1427,19 @@
         },
       });
       if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `HTTP ${res.status}`);
+        let message = `HTTP ${res.status}`;
+        try {
+          const data = await res.json();
+          if (data?.error) message = data.error;
+        } catch {
+          try {
+            const text = await res.text();
+            if (text) message = text;
+          } catch {}
+        }
+        const err = new Error(message);
+        err.status = res.status;
+        throw err;
       }
       return res.json();
     }
@@ -1471,7 +1513,7 @@
         })
         .catch(() => {
           setBackendHealth("disconnected", "Offline");
-          showToast("Could not save to backend.", "error");
+          showToast(getApiToken() ? "Could not save to backend." : "Could not save. Set API token in Data menu.", "error");
         })
         .finally(() => {
           persistInFlight = false;
@@ -2506,6 +2548,21 @@
       dataMenu.classList.remove("open");
       exportTrackerData();
     });
+    setTokenBtn.addEventListener("click", () => {
+      const current = getApiToken();
+      const value = window.prompt("Enter API token used by JOBLIO_API_TOKEN", current);
+      if (value === null) return;
+      setApiToken(value);
+      syncTokenButtons();
+      showToast(getApiToken() ? "API token saved locally." : "API token cleared.", "saved");
+      dataMenu.classList.remove("open");
+    });
+    clearTokenBtn.addEventListener("click", () => {
+      setApiToken("");
+      syncTokenButtons();
+      showToast("API token cleared.", "warn");
+      dataMenu.classList.remove("open");
+    });
     importBtn.addEventListener("click", () => {
       dataMenu.classList.remove("open");
       importInput.click();
@@ -2640,6 +2697,7 @@
     });
 
     (async () => {
+      syncTokenButtons();
       await hydrate();
       setupColumnResizer();
       render();
