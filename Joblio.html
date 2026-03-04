@@ -2295,8 +2295,6 @@
       document.getElementById("fMode").addEventListener("change", (e) => updateField(app, "workMode", e.target.value));
       const appliedInput = document.getElementById("fAppliedAt");
       const followUpInput = document.getElementById("fFollowUp");
-      // TODO: Investigate a durable strategy for browser/extension autofill on date inputs.
-
       appliedInput.addEventListener("change", (e) => {
         const value = e.target.value;
         if (!value) {

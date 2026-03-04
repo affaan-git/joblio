@@ -26,7 +26,7 @@ const env = {
   HOST: process.env.HOST || '127.0.0.1',
   PORT: process.env.PORT || '8787',
 };
-const plainPass = process.env.JOBLIO_BASIC_AUTH_PASS || randomPass(24);
+const plainPass = randomPass(24);
 if (!env.JOBLIO_BASIC_AUTH_HASH) {
   env.JOBLIO_BASIC_AUTH_HASH = createPasswordHash(plainPass);
 }

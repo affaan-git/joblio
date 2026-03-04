@@ -31,9 +31,6 @@ if (strictMode && !token) {
 if (strictMode && (!basicUser || !basicHash)) {
   issues.push('JOBLIO_BASIC_AUTH_USER and JOBLIO_BASIC_AUTH_HASH are required when strict mode is enabled (default).');
 }
-if (process.env.JOBLIO_BASIC_AUTH_PASS) {
-  warns.push('JOBLIO_BASIC_AUTH_PASS is ignored by server; use JOBLIO_BASIC_AUTH_HASH.');
-}
 
 if (!new Set(['off', 'on', 'require']).has(tlsMode)) {
   issues.push('JOBLIO_TLS_MODE must be one of: off, on, require.');

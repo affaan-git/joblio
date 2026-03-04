@@ -1,17 +1,61 @@
-# Joblio v1 (Local, Maximum Lockdown)
+# Joblio v1
 
 Joblio is a local-first job application tracker with a hardened backend: strict startup policy, global auth, session cookies + CSRF, rate limiting, audit-chain logging, snapshots/recovery, optional TLS, and cross-platform ops scripts.
 
-## Quick Start
+## Production Quick Start
 
-### Recommended (cross-platform secure start)
+Use this path for predictable production deployment.
+
+1. Generate credentials:
 
 ```bash
 cd tracker
-npm run start:secure
+API_TOKEN="$(openssl rand -hex 32)"
+BASIC_HASH="$(npm run -s auth:hash -- --password 'replace-with-a-strong-password')"
 ```
 
-What `start:secure` does:
+2. Provide TLS certificate and key, then start with strict settings:
+
+```bash
+HOST=127.0.0.1 \
+PORT=8787 \
+JOBLIO_ALLOW_REMOTE=0 \
+JOBLIO_STRICT_MODE=1 \
+JOBLIO_API_TOKEN="$API_TOKEN" \
+JOBLIO_BASIC_AUTH_USER='joblio' \
+JOBLIO_BASIC_AUTH_HASH="$BASIC_HASH" \
+JOBLIO_TLS_MODE=require \
+JOBLIO_TLS_CERT_PATH='/absolute/path/to/cert.pem' \
+JOBLIO_TLS_KEY_PATH='/absolute/path/to/key.pem' \
+JOBLIO_COOKIE_SECURE=1 \
+JOBLIO_SESSION_BINDING=strict \
+JOBLIO_HEALTH_VERBOSE=0 \
+JOBLIO_ERROR_VERBOSE=0 \
+npm run start:manual
+```
+
+3. Validate release gates:
+
+```bash
+npm run validate:release
+```
+
+Recommended deployment settings:
+- Keep `HOST=127.0.0.1` and expose through a local reverse proxy only if needed.
+- Keep `JOBLIO_TLS_MODE=require` and `JOBLIO_COOKIE_SECURE=1`.
+- Keep `JOBLIO_STRICT_MODE=1`, `JOBLIO_SESSION_BINDING=strict`, `JOBLIO_HEALTH_VERBOSE=0`, and `JOBLIO_ERROR_VERBOSE=0`.
+- Rotate `JOBLIO_API_TOKEN` and Basic Auth password on a regular schedule.
+
+## Quick Start
+
+### Recommended Start
+
+```bash
+cd tracker
+npm start
+```
+
+What `npm start` does:
 - Generates `JOBLIO_API_TOKEN` if missing.
 - Generates Basic Auth password hash (`JOBLIO_BASIC_AUTH_HASH`) if missing.
 - Sets strict defaults and runs preflight.
@@ -23,14 +67,14 @@ Then:
 2. Sign in via browser Basic Auth prompt.
 3. Frontend auto-creates API session (`/api/auth/session`).
 
-### Manual Start
+### Manual Start (advanced)
 
 ```bash
 cd tracker
 JOBLIO_API_TOKEN='set-a-long-random-secret' \
 JOBLIO_BASIC_AUTH_USER='joblio' \
 JOBLIO_BASIC_AUTH_HASH='scrypt$...' \
-npm start
+npm run start:manual
 ```
 
 Generate Basic Auth hash:
@@ -77,7 +121,7 @@ Enable HTTPS:
 JOBLIO_TLS_MODE=on \
 JOBLIO_TLS_CERT_PATH=/absolute/path/to/cert.pem \
 JOBLIO_TLS_KEY_PATH=/absolute/path/to/key.pem \
-npm run start:secure
+npm start
 ```
 
 Require HTTPS-only startup:
@@ -86,7 +130,7 @@ Require HTTPS-only startup:
 JOBLIO_TLS_MODE=require \
 JOBLIO_TLS_CERT_PATH=/absolute/path/to/cert.pem \
 JOBLIO_TLS_KEY_PATH=/absolute/path/to/key.pem \
-npm run start:secure
+npm start
 ```
 
 When HTTPS is active:
@@ -97,8 +141,8 @@ When HTTPS is active:
 
 ```bash
 npm run preflight           # config validation
-npm start                   # preflight + server
-npm run start:secure        # secure helper startup
+npm start                   # recommended secure startup
+npm run start:manual        # manual startup with explicit env vars
 npm run auth:hash -- --password '<password>'
 npm run tls:gen             # generate local TLS cert/key (OpenSSL)
 npm run test:security       # deterministic unit security tests
@@ -118,9 +162,6 @@ npm run restore -- --file <backup-file> --yes
 | `JOBLIO_API_TOKEN` | none | Yes | Backend secret for session signing + crypto |
 | `JOBLIO_BASIC_AUTH_USER` | none | Yes | Basic Auth username |
 | `JOBLIO_BASIC_AUTH_HASH` | none | Yes | Hashed Basic Auth password (`scrypt$...`) |
-
-Notes:
-- `JOBLIO_BASIC_AUTH_PASS` is ignored by server (legacy input only for helper scripts).
 
 ### Host / network / TLS
 
