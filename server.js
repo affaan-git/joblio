@@ -812,6 +812,37 @@ function serverError(res, err) {
   json(res, 500, ERROR_VERBOSE ? { error: 'Server error', detail: err?.message || String(err) } : { error: 'Server error' });
 }
 
+function publicClientErrorMessage(err) {
+  if (typeof err?.publicMessage === 'string' && err.publicMessage.trim()) {
+    return err.publicMessage.trim().slice(0, 180);
+  }
+  const status = Number(err?.statusCode);
+  switch (status) {
+    case 400:
+      return 'Bad request';
+    case 401:
+      return 'Unauthorized';
+    case 403:
+      return 'Forbidden';
+    case 404:
+      return 'Not found';
+    case 405:
+      return 'Method not allowed';
+    case 409:
+      return 'Conflict';
+    case 413:
+      return 'Payload too large';
+    case 415:
+      return 'Unsupported media type';
+    case 422:
+      return 'Unprocessable request';
+    case 429:
+      return 'Too many requests';
+    default:
+      return 'Request error';
+  }
+}
+
 async function readBody(req, maxBytes = MAX_JSON_BODY_BYTES) {
   const chunks = [];
   let total = 0;
@@ -1237,7 +1268,7 @@ const requestHandler = async (req, res) => {
     return await serveStatic(req, res, url);
   } catch (err) {
     if (Number.isInteger(err?.statusCode) && err.statusCode >= 400 && err.statusCode < 500) {
-      return json(res, err.statusCode, { error: err.message || 'Request error' });
+      return json(res, err.statusCode, { error: publicClientErrorMessage(err) });
     }
     return serverError(res, err);
   }

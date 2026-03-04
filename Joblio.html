@@ -1460,12 +1460,7 @@
         try {
           const data = await res.json();
           if (data?.error) message = data.error;
-        } catch {
-          try {
-            const text = await res.text();
-            if (text) message = text;
-          } catch {}
-        }
+        } catch {}
         const err = new Error(message);
         err.status = res.status;
         throw err;
