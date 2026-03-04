@@ -291,7 +291,16 @@ async function loadSessionStore() {
     }
     pruneExpiredSessions();
   } catch (err) {
-    await securityEvent('session_store_load_failed', { message: err?.message || String(err) }, 'error');
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    try {
+      if (fs.existsSync(SESSION_STORE_PATH)) {
+        await fsp.rename(SESSION_STORE_PATH, `${SESSION_STORE_PATH}.corrupt-${stamp}`);
+      }
+    } catch {}
+    sessions.clear();
+    sessionEpoch += 1;
+    await persistSessionStore();
+    await securityEvent('session_store_load_failed_recovered', { message: err?.message || String(err) }, 'warn');
   }
 }
 
@@ -583,7 +592,10 @@ function hasValidBasicAuth(req) {
 
 function requireBasicAuth(req, res) {
   if (hasValidBasicAuth(req)) return true;
-  securityEvent('basic_auth_failed', { ip: getClientIp(req), path: req.url || '', method: req.method || '' }, 'warn');
+  const hasHeader = Boolean(String(req.headers.authorization || '').trim());
+  if (hasHeader) {
+    securityEvent('basic_auth_failed', { ip: getClientIp(req), path: req.url || '', method: req.method || '' }, 'warn');
+  }
   applySecurityHeaders(res);
   res.setHeader('WWW-Authenticate', 'Basic realm="Joblio", charset="UTF-8"');
   res.writeHead(401, {
@@ -1015,6 +1027,25 @@ async function handleApi(req, res, url) {
       return json(res, 413, { error: `File too large (${buffer.byteLength} bytes). Limit: ${MAX_FILE_BYTES}` });
     }
     await fsp.writeFile(filePath, buffer);
+    const registered = await queueMutation(async () => {
+      const nextState = await readState();
+      const app = nextState.apps.find((a) => a.id === appId) || nextState.trashApps.find((a) => a.id === appId);
+      if (!app) return null;
+      if (!Array.isArray(app.workspaceFiles)) app.workspaceFiles = [];
+      if (!app.workspaceFiles.some((f) => f.id === id)) {
+        app.workspaceFiles.push({
+          id,
+          name: fileName,
+          type: str(body.type),
+          size: Number.isFinite(body.size) ? body.size : buffer.byteLength,
+        });
+      }
+      return writeState(nextState);
+    });
+    if (!registered) {
+      try { await fsp.unlink(filePath); } catch {}
+      return json(res, 400, { error: 'App not found when registering uploaded file' });
+    }
     await logAction('file.upload', { appId, fileId: id, name: safeName, size: buffer.byteLength });
     return json(res, 200, {
       file: {
@@ -1023,6 +1054,7 @@ async function handleApi(req, res, url) {
         type: str(body.type),
         size: Number.isFinite(body.size) ? body.size : buffer.byteLength,
       },
+      state: registered,
     });
   }
 

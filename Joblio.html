@@ -1932,8 +1932,13 @@
         render();
         renderTrashDialog();
         showToast("File permanently deleted.", "warn");
-      } catch {
-        showToast("Could not purge file.", "error");
+      } catch (err) {
+        const msg = String(err?.message || "").trim();
+        if (msg) {
+          showToast(msg, "error");
+        } else {
+          showToast("Could not purge file.", "error");
+        }
       }
     }
 
