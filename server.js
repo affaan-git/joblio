@@ -2,6 +2,7 @@
 'use strict';
 
 const http = require('node:http');
+const https = require('node:https');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
@@ -9,6 +10,9 @@ const crypto = require('node:crypto');
 
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 8787);
+const TLS_MODE = process.env.JOBLIO_TLS_MODE || 'off'; // off | on | require
+const TLS_CERT_PATH = process.env.JOBLIO_TLS_CERT_PATH || '';
+const TLS_KEY_PATH = process.env.JOBLIO_TLS_KEY_PATH || '';
 const ROOT_DIR = __dirname;
 const DATA_DIR = path.join(ROOT_DIR, '.joblio-data');
 const TEMPLATE_DIR = path.join(ROOT_DIR, 'templates');
@@ -39,6 +43,9 @@ const RATE_MAX_WRITE = Number(process.env.RATE_MAX_WRITE || 180);
 const RATE_MAX_UPLOAD = Number(process.env.RATE_MAX_UPLOAD || 24);
 const RATE_MAX_DELETE = Number(process.env.RATE_MAX_DELETE || 120);
 const RATE_MAX_IMPORT = Number(process.env.RATE_MAX_IMPORT || 10);
+const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 8 * 60 * 60 * 1000);
+const SESSION_ABS_TTL_MS = Number(process.env.SESSION_ABS_TTL_MS || 24 * 60 * 60 * 1000);
+const SESSION_COOKIE_NAME = 'joblio_sid';
 const SAFE_ID_RE = /^[a-zA-Z0-9_-]{6,100}$/;
 const ALLOWED_STATUS = new Set(['wishlist', 'in_progress', 'applied', 'interview', 'offer', 'rejected', 'closed']);
 const ALLOWED_THEME = new Set(['dark', 'light']);
@@ -48,6 +55,7 @@ const LOG_PATH = path.join(LOG_DIR, 'activity.log');
 const LOG_PREV_PATH = path.join(LOG_DIR, 'activity.log.1');
 const AUDIT_CHAIN_PATH = path.join(LOG_DIR, 'audit-chain.json');
 const rateBuckets = new Map();
+const sessions = new Map();
 
 const DEFAULT_STATE = {
   version: 1,
@@ -69,6 +77,7 @@ let auditIntegrity = {
   entries: 0,
 };
 let lastAuditVerifyMs = 0;
+let transportIsTls = false;
 
 async function ensureDirs() {
   validateStartupConfig();
@@ -124,6 +133,17 @@ function validateStartupConfig() {
   }
   if (STRICT_MODE && (!BASIC_AUTH_USER || !BASIC_AUTH_PASS)) {
     throw new Error('JOBLIO_STRICT_MODE=1 requires JOBLIO_BASIC_AUTH_USER and JOBLIO_BASIC_AUTH_PASS.');
+  }
+  if (!new Set(['off', 'on', 'require']).has(TLS_MODE)) {
+    throw new Error('JOBLIO_TLS_MODE must be one of: off, on, require');
+  }
+  if ((TLS_MODE === 'on' || TLS_MODE === 'require') && (!TLS_CERT_PATH || !TLS_KEY_PATH)) {
+    throw new Error('TLS enabled but JOBLIO_TLS_CERT_PATH or JOBLIO_TLS_KEY_PATH is missing.');
+  }
+  if ((TLS_MODE === 'on' || TLS_MODE === 'require') && (TLS_CERT_PATH || TLS_KEY_PATH)) {
+    if (!TLS_CERT_PATH || !TLS_KEY_PATH) {
+      throw new Error('TLS cert and key must both be provided.');
+    }
   }
 }
 
@@ -434,6 +454,9 @@ function applySecurityHeaders(res) {
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  if (transportIsTls) {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
   res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
 }
 
@@ -444,12 +467,6 @@ function requireWriteAuth(req, res) {
     return false;
   }
   return true;
-}
-
-function hasValidApiToken(req) {
-  if (!API_TOKEN) return true;
-  const supplied = req.headers['x-joblio-token'];
-  return typeof supplied === 'string' && supplied === API_TOKEN;
 }
 
 function hasValidBasicAuth(req) {
@@ -504,6 +521,105 @@ function isTrustedRequestOrigin(req) {
   }
   // Allow non-browser clients (curl/scripts) with no origin headers.
   return true;
+}
+
+function parseCookies(req) {
+  const raw = String(req.headers.cookie || '');
+  if (!raw) return {};
+  const out = {};
+  raw.split(';').forEach((part) => {
+    const idx = part.indexOf('=');
+    if (idx <= 0) return;
+    const key = part.slice(0, idx).trim();
+    const value = part.slice(idx + 1).trim();
+    if (!key) return;
+    out[key] = decodeURIComponent(value);
+  });
+  return out;
+}
+
+function hashSessionParts(...parts) {
+  return crypto.createHmac('sha256', API_TOKEN).update(parts.join('|')).digest('hex');
+}
+
+function makeSetCookie(value, maxAgeSec) {
+  const attrs = [`${SESSION_COOKIE_NAME}=${encodeURIComponent(value)}`, 'Path=/', 'HttpOnly', 'SameSite=Strict', `Max-Age=${maxAgeSec}`];
+  if (reqIsTlsExpected()) attrs.push('Secure');
+  return attrs.join('; ');
+}
+
+function reqIsTlsExpected() {
+  return process.env.JOBLIO_COOKIE_SECURE === '1' || transportIsTls;
+}
+
+function createSessionRecord(req) {
+  const sid = crypto.randomUUID();
+  const now = Date.now();
+  const createdAt = new Date(now).toISOString();
+  const ua = str(req.headers['user-agent'], 300);
+  const ip = getClientIp(req);
+  const sig = hashSessionParts(sid, createdAt, ua, ip);
+  const csrfToken = hashSessionParts('csrf', sid, createdAt, ua, ip).slice(0, 48);
+  const record = {
+    sid,
+    sig,
+    csrfToken,
+    createdAt,
+    lastSeenAt: createdAt,
+    ua,
+    ip,
+  };
+  sessions.set(sid, record);
+  pruneExpiredSessions();
+  return record;
+}
+
+function pruneExpiredSessions() {
+  const now = Date.now();
+  for (const [sid, session] of sessions.entries()) {
+    const createdMs = Date.parse(session.createdAt);
+    const lastMs = Date.parse(session.lastSeenAt);
+    if (!Number.isFinite(createdMs) || !Number.isFinite(lastMs)) {
+      sessions.delete(sid);
+      continue;
+    }
+    if (now - createdMs > SESSION_ABS_TTL_MS || now - lastMs > SESSION_TTL_MS) {
+      sessions.delete(sid);
+    }
+  }
+}
+
+function getSessionFromRequest(req) {
+  pruneExpiredSessions();
+  const cookies = parseCookies(req);
+  const sid = str(cookies[SESSION_COOKIE_NAME], 120);
+  if (!sid) return null;
+  const rec = sessions.get(sid);
+  if (!rec) return null;
+  const ua = str(req.headers['user-agent'], 300);
+  const ip = getClientIp(req);
+  const expectedSig = hashSessionParts(rec.sid, rec.createdAt, ua, ip);
+  if (rec.sig !== expectedSig) {
+    sessions.delete(sid);
+    return null;
+  }
+  rec.lastSeenAt = new Date().toISOString();
+  sessions.set(sid, rec);
+  return rec;
+}
+
+function requireApiSession(req, res) {
+  const session = getSessionFromRequest(req);
+  if (session) return session;
+  json(res, 401, { error: 'Unauthorized' });
+  return null;
+}
+
+function requireCsrf(req, res, session) {
+  const header = str(req.headers['x-joblio-csrf'], 120);
+  if (header && header === session.csrfToken) return true;
+  json(res, 403, { error: 'Invalid CSRF token' });
+  return false;
 }
 
 function getClientIp(req) {
@@ -634,18 +750,39 @@ async function findTrashedFilePath(appId, fileId) {
 }
 
 async function handleApi(req, res, url) {
-  if (!hasValidApiToken(req)) {
-    return json(res, 401, { error: 'Unauthorized' });
+  if (req.method === 'POST' && url.pathname === '/api/auth/session') {
+    if (!requireWriteAuth(req, res)) return;
+    if (!enforceRateLimit(req, res, url.pathname)) return;
+    const session = createSessionRecord(req);
+    res.setHeader('Set-Cookie', makeSetCookie(session.sid, Math.floor(SESSION_TTL_MS / 1000)));
+    return json(res, 200, {
+      ok: true,
+      csrfToken: session.csrfToken,
+      expiresInSec: Math.floor(SESSION_TTL_MS / 1000),
+      at: new Date().toISOString(),
+    });
   }
+
+  const session = requireApiSession(req, res);
+  if (!session) return;
   if (!requireWriteAuth(req, res)) return;
   if (!enforceRateLimit(req, res, url.pathname)) return;
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method || '') && url.pathname !== '/api/auth/session') {
+    if (!requireCsrf(req, res, session)) return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/auth/logout') {
+    sessions.delete(session.sid);
+    res.setHeader('Set-Cookie', makeSetCookie('', 0));
+    return json(res, 200, { ok: true, at: new Date().toISOString() });
+  }
 
   if (req.method === 'GET' && url.pathname === '/api/health') {
     if (Date.now() - lastAuditVerifyMs > 30000) {
       await verifyAuditLog();
     }
     const wantsVerbose = url.searchParams.get('verbose') === '1';
-    const canViewVerbose = HEALTH_VERBOSE || hasValidApiToken(req);
+    const canViewVerbose = HEALTH_VERBOSE || Boolean(session);
     const base = { ok: true, at: new Date().toISOString() };
     if (!(wantsVerbose && canViewVerbose)) return json(res, 200, base);
     return json(res, 200, {
@@ -670,9 +807,6 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === 'GET' && url.pathname === '/api/integrity/verify') {
-    if (!hasValidApiToken(req)) {
-      return json(res, 401, { error: 'Unauthorized' });
-    }
     await verifyAuditLog();
     return json(res, 200, { ok: auditIntegrity.ok, audit: auditIntegrity, at: new Date().toISOString() });
   }
@@ -930,7 +1064,7 @@ async function serveStatic(req, res, url) {
   notFound(res);
 }
 
-const server = http.createServer(async (req, res) => {
+const requestHandler = async (req, res) => {
   try {
     if (!requireBasicAuth(req, res)) return;
     const url = new URL(req.url, `http://${req.headers.host || `${HOST}:${PORT}`}`);
@@ -944,7 +1078,24 @@ const server = http.createServer(async (req, res) => {
     }
     return serverError(res, err);
   }
-});
+};
+
+function createServerWithTransport() {
+  const tlsRequested = (TLS_MODE === 'on' || TLS_MODE === 'require') && TLS_CERT_PATH && TLS_KEY_PATH;
+  if (tlsRequested) {
+    const cert = fs.readFileSync(path.resolve(TLS_CERT_PATH));
+    const key = fs.readFileSync(path.resolve(TLS_KEY_PATH));
+    transportIsTls = true;
+    return https.createServer({ cert, key }, requestHandler);
+  }
+  if (TLS_MODE === 'require') {
+    throw new Error('JOBLIO_TLS_MODE=require but TLS cert/key are unavailable.');
+  }
+  transportIsTls = false;
+  return http.createServer(requestHandler);
+}
+
+const server = createServerWithTransport();
 server.requestTimeout = 15000;
 server.headersTimeout = 15000;
 server.keepAliveTimeout = 5000;
@@ -954,7 +1105,7 @@ ensureDirs()
   .then(() => {
     server.listen(PORT, HOST, () => {
       // eslint-disable-next-line no-console
-      console.log(`Joblio server running at http://${HOST}:${PORT}`);
+      console.log(`Joblio server running at ${transportIsTls ? 'https' : 'http'}://${HOST}:${PORT}`);
       // eslint-disable-next-line no-console
       console.log(`Data dir: ${DATA_DIR}`);
     });

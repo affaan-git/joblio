@@ -1025,8 +1025,6 @@
       <div class="action-menu-wrap">
         <button id="dataBtn" class="btn" title="Import / export" aria-label="Open import and export actions">☰</button>
         <div id="dataMenu" class="action-menu">
-          <button id="setTokenBtn">Set API token</button>
-          <button id="clearTokenBtn">Clear API token</button>
           <button id="resumeTemplateBtn">Resume template</button>
           <button id="exportBtn">Export JSON</button>
           <button id="importBtn">Import JSON</button>
@@ -1155,7 +1153,6 @@
 
   <script>
     const API_BASE = "";
-    const API_TOKEN_KEY = "joblio-api-token";
     const LEFT_WIDTH_KEY = "joblio-left-width";
     const STATUS = [
       { id: "wishlist", label: "Wishlist" },
@@ -1211,8 +1208,6 @@
     const trashBtn = document.getElementById("trashBtn");
     const exportBtn = document.getElementById("exportBtn");
     const importBtn = document.getElementById("importBtn");
-    const setTokenBtn = document.getElementById("setTokenBtn");
-    const clearTokenBtn = document.getElementById("clearTokenBtn");
     const resumeTemplateBtn = document.getElementById("resumeTemplateBtn");
     const importInput = document.getElementById("importInput");
 
@@ -1247,6 +1242,9 @@
     const LEFT_PANEL_MAX = 620;
     let saveToastTimer = null;
     let lastSavedToastAt = 0;
+    let csrfToken = "";
+    let sessionReady = false;
+    let sessionBootstrapInFlight = null;
 
     function uid() {
       return `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -1373,33 +1371,6 @@
       }, 3000);
     }
 
-    function getApiToken() {
-      return localStorage.getItem(API_TOKEN_KEY) || "";
-    }
-
-    function setApiToken(token) {
-      const clean = String(token || "").trim();
-      if (!clean) {
-        localStorage.removeItem(API_TOKEN_KEY);
-        return;
-      }
-      localStorage.setItem(API_TOKEN_KEY, clean);
-    }
-
-    function tokenMask(token) {
-      const t = String(token || "");
-      if (!t) return "No API token";
-      if (t.length <= 8) return "API token set";
-      return `API token: ${t.slice(0, 4)}...${t.slice(-3)}`;
-    }
-
-    function syncTokenButtons() {
-      const token = getApiToken();
-      setTokenBtn.textContent = token ? `Update token (${tokenMask(token)})` : "Set API token";
-      clearTokenBtn.disabled = !token;
-      clearTokenBtn.style.opacity = token ? "1" : "0.55";
-    }
-
     function scheduleSavedToast() {
       if (saveToastTimer) clearTimeout(saveToastTimer);
       saveToastTimer = setTimeout(() => {
@@ -1433,17 +1404,56 @@
       };
     }
 
+    async function bootstrapSession() {
+      if (sessionBootstrapInFlight) return sessionBootstrapInFlight;
+      sessionBootstrapInFlight = (async () => {
+        const res = await fetch(`${API_BASE}/api/auth/session`, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        if (!res.ok) {
+          let message = `HTTP ${res.status}`;
+          try {
+            const data = await res.json();
+            if (data?.error) message = data.error;
+          } catch {}
+          const err = new Error(message);
+          err.status = res.status;
+          throw err;
+        }
+        const data = await res.json();
+        csrfToken = String(data?.csrfToken || "");
+        sessionReady = Boolean(csrfToken);
+      })().finally(() => {
+        sessionBootstrapInFlight = null;
+      });
+      return sessionBootstrapInFlight;
+    }
+
     async function requestJSON(path, options = {}) {
-      const apiToken = getApiToken();
+      const retryAuth = Boolean(options._retryAuth);
+      const fetchOptions = { ...options };
+      delete fetchOptions._retryAuth;
+      const method = String(fetchOptions.method || "GET").toUpperCase();
+      const headers = {
+        "Content-Type": "application/json",
+        ...(fetchOptions.headers || {}),
+      };
+      if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && csrfToken) {
+        headers["X-Joblio-CSRF"] = csrfToken;
+      }
       const res = await fetch(`${API_BASE}${path}`, {
-        ...options,
-        headers: {
-          "Content-Type": "application/json",
-          ...(apiToken ? { "X-Joblio-Token": apiToken } : {}),
-          ...(options.headers || {}),
-        },
+        ...fetchOptions,
+        credentials: "same-origin",
+        headers,
       });
       if (!res.ok) {
+        if (res.status === 401 && !retryAuth) {
+          await bootstrapSession();
+          return requestJSON(path, { ...fetchOptions, _retryAuth: true });
+        }
         let message = `HTTP ${res.status}`;
         try {
           const data = await res.json();
@@ -1461,13 +1471,17 @@
       return res.json();
     }
 
-    async function downloadWithAuth(path, filename) {
-      const apiToken = getApiToken();
+    async function downloadWithAuth(path, filename, retryAuth = false) {
+      if (!sessionReady) {
+        await bootstrapSession();
+      }
       const res = await fetch(`${API_BASE}${path}`, {
-        headers: {
-          ...(apiToken ? { "X-Joblio-Token": apiToken } : {}),
-        },
+        credentials: "same-origin",
       });
+      if (res.status === 401 && !retryAuth) {
+        await bootstrapSession();
+        return downloadWithAuth(path, filename, true);
+      }
       if (!res.ok) {
         let message = `HTTP ${res.status}`;
         try {
@@ -1600,7 +1614,7 @@
         })
         .catch(() => {
           setBackendHealth("disconnected", "Offline");
-          showToast(getApiToken() ? "Could not save to backend." : "Could not save. Set API token in Data menu.", "error");
+          showToast("Could not save to backend.", "error");
         })
         .finally(() => {
           persistInFlight = false;
@@ -1634,7 +1648,7 @@
         syncThemeLabel();
         setBackendHealth("disconnected", "Offline");
         if (err?.status === 401) {
-          showToast("Unauthorized. Set API token in Data menu.", "error");
+          showToast("Unauthorized. Re-authenticate in browser and reload.", "error");
         } else {
           showToast("Backend unavailable. Start server.js", "error");
         }
@@ -2639,21 +2653,6 @@
       dataMenu.classList.remove("open");
       exportTrackerData();
     });
-    setTokenBtn.addEventListener("click", () => {
-      const current = getApiToken();
-      const value = window.prompt("Enter API token used by JOBLIO_API_TOKEN", current);
-      if (value === null) return;
-      setApiToken(value);
-      syncTokenButtons();
-      showToast(getApiToken() ? "API token saved locally." : "API token cleared.", "saved");
-      dataMenu.classList.remove("open");
-    });
-    clearTokenBtn.addEventListener("click", () => {
-      setApiToken("");
-      syncTokenButtons();
-      showToast("API token cleared.", "warn");
-      dataMenu.classList.remove("open");
-    });
     backendHealth.style.cursor = "pointer";
     backendHealth.addEventListener("click", async () => {
       dataMenu.classList.remove("open");
@@ -2664,7 +2663,7 @@
       downloadWithAuth("/api/template/resume", "joblio-resume-template.md")
         .then(() => showToast("Resume template downloaded.", "success"))
         .catch((err) => {
-          showToast(err?.status === 401 ? "Unauthorized. Set API token in Data menu." : "Could not download template.", "error");
+          showToast(err?.status === 401 ? "Unauthorized. Re-authenticate in browser and reload." : "Could not download template.", "error");
         });
     });
     importBtn.addEventListener("click", () => {
@@ -2807,7 +2806,9 @@
     });
 
     (async () => {
-      syncTokenButtons();
+      try {
+        await bootstrapSession();
+      } catch {}
       await hydrate();
       setupColumnResizer();
       render();

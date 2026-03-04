@@ -43,9 +43,7 @@ preflight.on('exit', (code) => {
   // eslint-disable-next-line no-console
   console.log(`Browser auth pass: ${env.JOBLIO_BASIC_AUTH_PASS}`);
   // eslint-disable-next-line no-console
-  console.log('Set this token in UI via Data -> Set API token');
-  // eslint-disable-next-line no-console
-  console.log(`Token: ${env.JOBLIO_API_TOKEN}`);
+  console.log('Session authentication is automatic after browser login.');
   // eslint-disable-next-line no-console
   console.log('');
 

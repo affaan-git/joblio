@@ -36,8 +36,7 @@ echo
 echo "Starting Joblio at http://${HOST}:${PORT}"
 echo "Browser auth user: ${JOBLIO_BASIC_AUTH_USER}"
 echo "Browser auth pass: ${JOBLIO_BASIC_AUTH_PASS}"
-echo "Set this token in UI via Data -> Set API token"
-echo "Token: ${JOBLIO_API_TOKEN}"
+echo "Session authentication is automatic after browser login."
 echo
 
 exec node server.js

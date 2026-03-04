@@ -11,6 +11,9 @@ const allowRemote = process.env.JOBLIO_ALLOW_REMOTE === '1';
 const token = process.env.JOBLIO_API_TOKEN || '';
 const basicUser = process.env.JOBLIO_BASIC_AUTH_USER || '';
 const basicPass = process.env.JOBLIO_BASIC_AUTH_PASS || '';
+const tlsMode = process.env.JOBLIO_TLS_MODE || 'off';
+const tlsCert = process.env.JOBLIO_TLS_CERT_PATH || '';
+const tlsKey = process.env.JOBLIO_TLS_KEY_PATH || '';
 const dataDir = path.join(root, '.joblio-data');
 const templatePath = path.join(root, 'templates', 'resume-template.md');
 
@@ -27,6 +30,19 @@ if (strictMode && !token) {
 }
 if (strictMode && (!basicUser || !basicPass)) {
   issues.push('JOBLIO_BASIC_AUTH_USER and JOBLIO_BASIC_AUTH_PASS are required when strict mode is enabled (default).');
+}
+
+if (!new Set(['off', 'on', 'require']).has(tlsMode)) {
+  issues.push('JOBLIO_TLS_MODE must be one of: off, on, require.');
+}
+if ((tlsMode === 'on' || tlsMode === 'require') && (!tlsCert || !tlsKey)) {
+  issues.push('TLS mode requires JOBLIO_TLS_CERT_PATH and JOBLIO_TLS_KEY_PATH.');
+}
+if (tlsCert && !fs.existsSync(path.resolve(tlsCert))) {
+  issues.push(`TLS cert not found: ${tlsCert}`);
+}
+if (tlsKey && !fs.existsSync(path.resolve(tlsKey))) {
+  issues.push(`TLS key not found: ${tlsKey}`);
 }
 
 try {
