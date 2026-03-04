@@ -6,8 +6,8 @@
   "scripts": {
     "preflight": "node ./scripts/preflight.js",
     "setup": "node ./scripts/setup.js",
+    "reconfigure": "node ./scripts/setup.js --reconfigure",
     "start": "node ./scripts/start.js",
-    "auth:hash": "node ./scripts/gen-auth-hash.js",
     "tls:gen": "node ./scripts/gen-local-tls.js",
     "test:security": "node --test ./scripts/security-tests.js",
     "validate:release": "node ./scripts/validate-release.js",

@@ -41,5 +41,5 @@ const keyPath = path.join(outDir, 'localhost-key.pem');
   // eslint-disable-next-line no-console
   console.log(`Generated key:  ${keyPath}`);
   // eslint-disable-next-line no-console
-  console.log('Then run setup with TLS: JOBLIO_SETUP_FORCE=1 JOBLIO_SETUP_TLS_MODE=require JOBLIO_SETUP_TLS_CERT_PATH=<cert> JOBLIO_SETUP_TLS_KEY_PATH=<key> npm run setup');
+  console.log('Then run interactive setup and select TLS mode=require with those cert/key paths.');
 })();

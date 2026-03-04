@@ -40,41 +40,42 @@ function runWithEnv(cmd, args, env) {
 }
 
 async function ensureSetup() {
-  const exists = fs.existsSync(configPath);
-  if (exists) return true;
-  const setupEnv = { ...process.env };
-  if (!setupEnv.JOBLIO_SETUP_NON_INTERACTIVE && !process.stdin.isTTY) {
-    setupEnv.JOBLIO_SETUP_NON_INTERACTIVE = '1';
+  if (fs.existsSync(configPath)) return true;
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    console.error('Missing config and no interactive terminal available. Run `npm run setup` in a terminal first.');
+    return false;
   }
-  const result = await runWithEnv(process.execPath, ['./scripts/setup.js'], setupEnv);
-  return result.code === 0;
+  const result = await runWithEnv(process.execPath, ['./scripts/setup.js'], process.env);
+  return result.code === 0 && fs.existsSync(configPath);
+}
+
+function buildLockedRuntimeEnv(configEnv) {
+  const locked = {
+    ...process.env,
+  };
+  for (const k of Object.keys(configEnv)) {
+    delete locked[k];
+  }
+  return {
+    ...locked,
+    ...configEnv,
+  };
 }
 
 async function main() {
   await fsp.mkdir(dataDir, { recursive: true });
   const setupOk = await ensureSetup();
-  if (!setupOk) {
-    console.error('Startup aborted: setup did not complete.');
-    process.exit(1);
-  }
-
-  if (!fs.existsSync(configPath)) {
-    console.error('Startup aborted: missing .joblio-data/config.env. Run `npm run setup`.');
-    process.exit(1);
-  }
+  if (!setupOk) process.exit(1);
 
   const configEnv = await loadConfigEnv();
-  const env = {
-    ...configEnv,
-    ...process.env,
-  };
+  const env = buildLockedRuntimeEnv(configEnv);
 
   const preflight = await runWithEnv(process.execPath, ['./scripts/preflight.js'], env);
   if (preflight.code !== 0) process.exit(preflight.code || 1);
 
-  const protocol = String(env.JOBLIO_TLS_MODE || '').toLowerCase() === 'off' ? 'http' : 'https';
-  const host = env.HOST || '127.0.0.1';
-  const port = env.PORT || '8787';
+  const protocol = String(configEnv.JOBLIO_TLS_MODE || '').toLowerCase() === 'off' ? 'http' : 'https';
+  const host = configEnv.HOST || '127.0.0.1';
+  const port = configEnv.PORT || '8787';
   console.log(`Starting Joblio on ${protocol}://${host}:${port}`);
   console.log('Use your configured Basic Auth credentials to sign in.');
 

@@ -154,7 +154,7 @@ function validateStartupConfig() {
     throw new Error('JOBLIO_STRICT_MODE=1 requires JOBLIO_BASIC_AUTH_USER and JOBLIO_BASIC_AUTH_HASH.');
   }
   if (BASIC_AUTH_HASH && !String(BASIC_AUTH_HASH).startsWith('scrypt$')) {
-    throw new Error('JOBLIO_BASIC_AUTH_HASH must be in scrypt$... format. Use: npm run auth:hash -- --password <pass>');
+    throw new Error('JOBLIO_BASIC_AUTH_HASH must be in scrypt$... format. Run: npm run setup');
   }
   if (!new Set(['strict', 'ip', 'ua', 'off']).has(SESSION_BINDING)) {
     throw new Error('JOBLIO_SESSION_BINDING must be one of: strict, ip, ua, off');
