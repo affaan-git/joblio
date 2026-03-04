@@ -4,7 +4,10 @@
   "private": true,
   "description": "Joblio local tracker backend + UI",
   "scripts": {
+    "preflight": "node ./scripts/preflight.js",
     "start": "node server.js",
+    "start:secure": "./scripts/setup-local.sh",
+    "smoke": "node ./scripts/smoke-test.js",
     "backup": "./scripts/backup.sh"
   }
 }

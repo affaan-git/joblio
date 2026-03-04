@@ -1027,6 +1027,8 @@
         <div id="dataMenu" class="action-menu">
           <button id="setTokenBtn">Set API token</button>
           <button id="clearTokenBtn">Clear API token</button>
+          <button id="healthReportBtn">Health report</button>
+          <button id="resumeTemplateBtn">Resume template</button>
           <button id="exportBtn">Export JSON</button>
           <button id="importBtn">Import JSON</button>
         </div>
@@ -1141,6 +1143,17 @@
     </div>
   </div>
 
+  <div class="dialog-wrap" id="healthDialog">
+    <div class="dialog">
+      <div class="section-title">Backend health</div>
+      <div id="healthDialogBody" class="small" style="display:grid; gap:0.4rem; max-height:50vh; overflow:auto;"></div>
+      <div style="display:flex; justify-content:flex-end; gap:0.45rem;">
+        <button id="refreshHealthBtn" class="btn">Refresh</button>
+        <button id="closeHealthBtn" class="btn">Close</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const API_BASE = "";
     const API_TOKEN_KEY = "joblio-api-token";
@@ -1201,6 +1214,8 @@
     const importBtn = document.getElementById("importBtn");
     const setTokenBtn = document.getElementById("setTokenBtn");
     const clearTokenBtn = document.getElementById("clearTokenBtn");
+    const healthReportBtn = document.getElementById("healthReportBtn");
+    const resumeTemplateBtn = document.getElementById("resumeTemplateBtn");
     const importInput = document.getElementById("importInput");
 
     const newBtn = document.getElementById("newBtn");
@@ -1223,6 +1238,10 @@
     const statusHistoryView = document.getElementById("statusHistoryView");
     const statusHistoryList = document.getElementById("statusHistoryList");
     const clearStatusHistoryBtn = document.getElementById("clearStatusHistoryBtn");
+    const healthDialog = document.getElementById("healthDialog");
+    const healthDialogBody = document.getElementById("healthDialogBody");
+    const refreshHealthBtn = document.getElementById("refreshHealthBtn");
+    const closeHealthBtn = document.getElementById("closeHealthBtn");
     const toastWrap = document.getElementById("toastWrap");
     let statusDialogAppId = null;
     const LEFT_PANEL_DEFAULT = 372;
@@ -1470,6 +1489,48 @@
       const d = new Date(iso);
       if (Number.isNaN(d.getTime())) return "";
       return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    }
+
+    function closeHealthDialog() {
+      healthDialog.classList.remove("open");
+    }
+
+    async function renderHealthDialog() {
+      healthDialogBody.innerHTML = `<div class="small">Loading...</div>`;
+      try {
+        const health = await requestJSON("/api/health?verbose=1");
+        let integrity = { ok: null, audit: null };
+        try {
+          integrity = await requestJSON("/api/integrity/verify");
+        } catch {}
+        const rows = [
+          ["Status", health.ok ? "OK" : "Error"],
+          ["Server time", fmtDate(health.at)],
+          ["Uptime (sec)", Number.isFinite(health.uptimeSec) ? String(health.uptimeSec) : "Hidden"],
+          ["Last error", health.lastError ? escapeHtml(health.lastError) : "None"],
+          ["Audit verified", integrity?.ok === true ? "Yes" : integrity?.ok === false ? "No" : "Unavailable"],
+          ["Audit entries", Number.isFinite(integrity?.audit?.entries) ? String(integrity.audit.entries) : "Hidden"],
+          ["State max body", health?.limits?.maxJsonBodyBytes ? `${health.limits.maxJsonBodyBytes} bytes` : "Hidden"],
+          ["Upload max body", health?.limits?.maxUploadJsonBytes ? `${health.limits.maxUploadJsonBytes} bytes` : "Hidden"],
+          ["Max file size", health?.limits?.maxFileBytes ? `${health.limits.maxFileBytes} bytes` : "Hidden"],
+          ["Purge min age", health?.limits?.purgeMinAgeSec ? `${health.limits.purgeMinAgeSec}s` : "Hidden"],
+        ];
+        healthDialogBody.innerHTML = rows
+          .map(([label, value]) => `
+            <div style="display:flex; justify-content:space-between; gap:0.9rem;">
+              <span class="small" style="color:var(--text-muted)">${escapeHtml(label)}</span>
+              <span class="small" style="color:var(--text)">${value}</span>
+            </div>
+          `)
+          .join("");
+      } catch (err) {
+        healthDialogBody.innerHTML = `<div class="small">Could not load health report: ${escapeHtml(err?.message || "Unknown error")}</div>`;
+      }
+    }
+
+    async function openHealthDialog() {
+      await renderHealthDialog();
+      healthDialog.classList.add("open");
     }
 
     function currentStatePayload() {
@@ -2563,6 +2624,14 @@
       showToast("API token cleared.", "warn");
       dataMenu.classList.remove("open");
     });
+    healthReportBtn.addEventListener("click", async () => {
+      dataMenu.classList.remove("open");
+      await openHealthDialog();
+    });
+    resumeTemplateBtn.addEventListener("click", () => {
+      dataMenu.classList.remove("open");
+      window.location.href = "/api/template/resume";
+    });
     importBtn.addEventListener("click", () => {
       dataMenu.classList.remove("open");
       importInput.click();
@@ -2593,6 +2662,11 @@
     trashDialog.addEventListener("click", (e) => {
       if (e.target === trashDialog) closeTrashDialog();
     });
+    healthDialog.addEventListener("click", (e) => {
+      if (e.target === healthDialog) closeHealthDialog();
+    });
+    refreshHealthBtn.addEventListener("click", renderHealthDialog);
+    closeHealthBtn.addEventListener("click", closeHealthDialog);
 
     newDialog.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && e.target.tagName !== "TEXTAREA") {
@@ -2693,6 +2767,7 @@
         closeStatusDialog();
         closeTrashDialog();
         closeNewDialog();
+        closeHealthDialog();
       }
     });
 

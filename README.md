@@ -4,10 +4,25 @@
 
 ```bash
 cd tracker
-npm start
+JOBLIO_API_TOKEN='set-a-long-random-secret' npm start
 ```
 
 Then open: `http://127.0.0.1:8787`
+
+Set token in UI: `Data -> Set API token`
+
+## Secure Local Start (Recommended)
+
+```bash
+cd tracker
+npm run start:secure
+```
+
+This script:
+- Generates `JOBLIO_API_TOKEN` for the current shell if missing
+- Enforces strict mode defaults
+- Runs preflight checks
+- Starts server and prints token for UI entry
 
 ## What v1 backend stores
 
@@ -64,6 +79,8 @@ Then open: `http://127.0.0.1:8787`
 - `GET /api/state`
 - `PUT /api/state` with `{ "state": { ... } }`
 - `GET /api/health`
+- `GET /api/health?verbose=1` (requires token unless verbose mode enabled)
+- `GET /api/integrity/verify` (requires token)
 - `POST /api/files/upload` with `{ appId, name, type, size, contentBase64 }`
 - `DELETE /api/files/:fileId`
 - `POST /api/files/:fileId/restore`
@@ -71,6 +88,7 @@ Then open: `http://127.0.0.1:8787`
 - `GET /api/files/:fileId/download`
 - `GET /api/export`
 - `POST /api/import`
+- `GET /api/template/resume`
 
 ### API Examples
 
@@ -102,6 +120,10 @@ curl -s -X POST http://127.0.0.1:8787/api/files/upload \\
 - Application deletion is soft-delete in UI (Recently deleted dialog).
 - File deletion from an application is soft-delete to Recently deleted Files.
 - Purging an app permanently purges that app and currently attached files.
+- Data menu includes:
+  - API token set/clear
+  - Health report
+  - Resume template download
 
 ## Backups
 
@@ -110,6 +132,22 @@ Create a timestamped local backup of state:
 ```bash
 cd tracker
 npm run backup
+```
+
+## Ops Checks
+
+Preflight:
+
+```bash
+cd tracker
+npm run preflight
+```
+
+Smoke test:
+
+```bash
+cd tracker
+npm run smoke
 ```
 
 Backups are written to:

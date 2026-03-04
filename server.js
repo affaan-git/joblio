@@ -11,11 +11,13 @@ const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 8787);
 const ROOT_DIR = __dirname;
 const DATA_DIR = path.join(ROOT_DIR, '.joblio-data');
+const TEMPLATE_DIR = path.join(ROOT_DIR, 'templates');
 const STORAGE_DIR = path.join(DATA_DIR, 'storage');
 const TRASH_STORAGE_DIR = path.join(DATA_DIR, 'storage-trash');
 const LOG_DIR = path.join(DATA_DIR, 'logs');
 const STATE_PATH = path.join(DATA_DIR, 'state.json');
 const APP_HTML = path.join(ROOT_DIR, 'Joblio.html');
+const RESUME_TEMPLATE_PATH = path.join(TEMPLATE_DIR, 'resume-template.md');
 const MAX_JSON_BODY_BYTES = Number(process.env.MAX_JSON_BODY_BYTES || 5 * 1024 * 1024);
 const MAX_UPLOAD_JSON_BYTES = Number(process.env.MAX_UPLOAD_JSON_BYTES || 35 * 1024 * 1024);
 const MAX_FILE_BYTES = Number(process.env.MAX_FILE_BYTES || 25 * 1024 * 1024);
@@ -69,6 +71,7 @@ let lastAuditVerifyMs = 0;
 async function ensureDirs() {
   validateStartupConfig();
   await fsp.mkdir(DATA_DIR, { recursive: true });
+  await fsp.mkdir(TEMPLATE_DIR, { recursive: true });
   await fsp.mkdir(STORAGE_DIR, { recursive: true });
   await fsp.mkdir(TRASH_STORAGE_DIR, { recursive: true });
   await fsp.mkdir(LOG_DIR, { recursive: true });
@@ -435,13 +438,17 @@ function requireWriteAuth(req, res) {
     json(res, 403, { error: 'Forbidden origin' });
     return false;
   }
-  if (!API_TOKEN) return true;
-  const supplied = req.headers['x-joblio-token'];
-  if (typeof supplied !== 'string' || supplied !== API_TOKEN) {
+  if (!hasValidApiToken(req)) {
     json(res, 401, { error: 'Unauthorized' });
     return false;
   }
   return true;
+}
+
+function hasValidApiToken(req) {
+  if (!API_TOKEN) return true;
+  const supplied = req.headers['x-joblio-token'];
+  return typeof supplied === 'string' && supplied === API_TOKEN;
 }
 
 function isTrustedRequestOrigin(req) {
@@ -604,8 +611,10 @@ async function handleApi(req, res, url) {
     if (Date.now() - lastAuditVerifyMs > 30000) {
       await verifyAuditLog();
     }
+    const wantsVerbose = url.searchParams.get('verbose') === '1';
+    const canViewVerbose = HEALTH_VERBOSE || hasValidApiToken(req);
     const base = { ok: true, at: new Date().toISOString() };
-    if (!HEALTH_VERBOSE) return json(res, 200, base);
+    if (!(wantsVerbose && canViewVerbose)) return json(res, 200, base);
     return json(res, 200, {
       ...base,
       uptimeSec: Math.floor(process.uptime()),
@@ -625,6 +634,31 @@ async function handleApi(req, res, url) {
       },
       audit: auditIntegrity,
     });
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/integrity/verify') {
+    if (!hasValidApiToken(req)) {
+      return json(res, 401, { error: 'Unauthorized' });
+    }
+    await verifyAuditLog();
+    return json(res, 200, { ok: auditIntegrity.ok, audit: auditIntegrity, at: new Date().toISOString() });
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/template/resume') {
+    let content = '';
+    try {
+      content = await fsp.readFile(RESUME_TEMPLATE_PATH, 'utf8');
+    } catch {
+      content = '# Joblio Resume Template\n\n## Header\n- Name\n- Email\n- Location\n- LinkedIn / Portfolio\n\n## Summary\n2-4 lines tailored to the role.\n\n## Experience\n- Role, Company, Dates\n- Impact bullets (metrics)\n\n## Skills\n- Languages\n- Frameworks\n- Tools\n';
+    }
+    applySecurityHeaders(res);
+    res.writeHead(200, {
+      'Content-Type': 'text/markdown; charset=utf-8',
+      'Content-Disposition': 'attachment; filename="joblio-resume-template.md"',
+      'Cache-Control': 'no-store',
+    });
+    res.end(content);
+    return;
   }
 
   if (req.method === 'GET' && url.pathname === '/api/state') {
