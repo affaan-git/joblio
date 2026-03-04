@@ -1,0 +1,10 @@
+{
+  "name": "joblio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Joblio local tracker backend + UI",
+  "scripts": {
+    "start": "node server.js",
+    "backup": "./scripts/backup.sh"
+  }
+}

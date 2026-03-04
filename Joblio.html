@@ -192,6 +192,58 @@
       justify-self: end;
     }
 
+    .health-pill {
+      border: 1px solid var(--border);
+      background: var(--bg-panel);
+      border-radius: 999px;
+      padding: 0.28rem 0.58rem;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      white-space: nowrap;
+    }
+
+    .health-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--text-muted);
+      box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.16);
+    }
+
+    .health-pill.connected .health-dot {
+      background: var(--success);
+      box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.18);
+    }
+
+    .health-pill.disconnected .health-dot {
+      background: var(--danger);
+      box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.16);
+    }
+
+    .health-pill.saving .health-dot {
+      background: var(--warn);
+      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.16);
+    }
+
+    .backend-banner {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.6rem;
+      padding: 0.46rem 1.1rem;
+      border-bottom: 1px solid var(--border);
+      background: rgba(239, 68, 68, 0.12);
+      color: var(--text);
+      font-size: 0.79rem;
+    }
+
+    .backend-banner.show {
+      display: flex;
+    }
+
     .btn {
       border: 1px solid var(--border);
       border-radius: 999px;
@@ -616,6 +668,7 @@
       display: grid;
       gap: 0.2rem;
       text-align: left;
+      cursor: pointer;
     }
 
     .file-tile-head {
@@ -972,11 +1025,21 @@
           <button id="importBtn">Import JSON</button>
         </div>
       </div>
+      <div id="backendHealth" class="health-pill disconnected" title="Backend status">
+        <span class="health-dot"></span>
+        <span id="backendHealthText">Backend offline</span>
+      </div>
       <input id="importInput" type="file" accept="application/json" style="display:none;" />
       <button id="themeToggle" class="btn" title="Toggle theme" aria-label="Toggle theme">☀</button>
+      <button id="trashBtn" class="btn" title="Recently deleted">Trash</button>
       <button id="newBtn" class="btn primary" title="Create new application (N)">+ New</button>
     </div>
   </header>
+
+  <div id="backendBanner" class="backend-banner">
+    <span>Backend is offline. Changes cannot be saved.</span>
+    <button id="retryBackendBtn" class="btn">Retry</button>
+  </div>
 
   <main class="layout">
     <section class="left">
@@ -1031,6 +1094,23 @@
 
   <div id="toastWrap" class="toast-wrap" aria-live="polite" aria-atomic="true"></div>
 
+  <div class="dialog-wrap" id="trashDialog">
+    <div class="dialog">
+      <div class="section-title">Recently deleted</div>
+      <div style="display:grid; gap:0.4rem;">
+        <div class="small" style="font-weight:600; color:var(--text);">Applications</div>
+        <div id="trashAppsList" class="status-history-list"></div>
+      </div>
+      <div style="display:grid; gap:0.4rem;">
+        <div class="small" style="font-weight:600; color:var(--text);">Files</div>
+        <div id="trashFilesList" class="status-history-list"></div>
+      </div>
+      <div style="display:flex; justify-content:flex-end;">
+        <button id="trashClose" class="btn">Close</button>
+      </div>
+    </div>
+  </div>
+
   <div class="dialog-wrap" id="statusDialog">
     <div class="dialog">
       <div class="section-title">Set application status</div>
@@ -1060,7 +1140,7 @@
   </div>
 
   <script>
-    const STORAGE_KEY = "joblio-v1";
+    const API_BASE = "";
     const LEFT_WIDTH_KEY = "joblio-left-width";
     const STATUS = [
       { id: "wishlist", label: "Wishlist" },
@@ -1081,6 +1161,8 @@
       statusFilter: "all",
       modeFilter: "all",
       theme: "dark",
+      trashApps: [],
+      trashFiles: [],
     };
 
     const topBar = document.querySelector(".top-bar");
@@ -1105,6 +1187,11 @@
     const themeToggle = document.getElementById("themeToggle");
     const dataBtn = document.getElementById("dataBtn");
     const dataMenu = document.getElementById("dataMenu");
+    const backendHealth = document.getElementById("backendHealth");
+    const backendHealthText = document.getElementById("backendHealthText");
+    const backendBanner = document.getElementById("backendBanner");
+    const retryBackendBtn = document.getElementById("retryBackendBtn");
+    const trashBtn = document.getElementById("trashBtn");
     const exportBtn = document.getElementById("exportBtn");
     const importBtn = document.getElementById("importBtn");
     const importInput = document.getElementById("importInput");
@@ -1118,6 +1205,10 @@
     const newTitle = document.getElementById("newTitle");
     const newLocation = document.getElementById("newLocation");
     const newMode = document.getElementById("newMode");
+    const trashDialog = document.getElementById("trashDialog");
+    const trashAppsList = document.getElementById("trashAppsList");
+    const trashFilesList = document.getElementById("trashFilesList");
+    const trashClose = document.getElementById("trashClose");
     const statusDialog = document.getElementById("statusDialog");
     const statusTabUpdate = document.getElementById("statusTabUpdate");
     const statusTabHistory = document.getElementById("statusTabHistory");
@@ -1225,44 +1316,142 @@
       };
     }
 
-    function persist() {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          apps: state.apps,
-          activeId: state.activeId,
-          theme: state.theme,
-        })
-      );
+    async function requestJSON(path, options = {}) {
+      const res = await fetch(`${API_BASE}${path}`, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          ...(options.headers || {}),
+        },
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `HTTP ${res.status}`);
+      }
+      return res.json();
     }
 
-    function hydrate() {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        try {
-          const data = JSON.parse(raw);
-          state.apps = Array.isArray(data.apps) ? data.apps : [];
-          state.activeId = data.activeId || null;
-          state.theme = data.theme === "light" ? "light" : "dark";
-        } catch {
-          state.apps = [];
-        }
+    let persistTimer = null;
+    let persistInFlight = false;
+    let persistQueued = false;
+    let lastBackendSaveAt = "";
+
+    function setBackendHealth(status, text) {
+      backendHealth.classList.remove("connected", "disconnected", "saving");
+      if (status) backendHealth.classList.add(status);
+      backendHealthText.textContent = text;
+      backendBanner.classList.toggle("show", status === "disconnected");
+    }
+
+    function formatTimeShort(iso) {
+      if (!iso) return "";
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return "";
+      return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    }
+
+    function currentStatePayload() {
+      return {
+        version: 1,
+        apps: state.apps,
+        trashApps: state.trashApps,
+        trashFiles: state.trashFiles,
+        activeId: state.activeId,
+        theme: state.theme,
+      };
+    }
+
+    function applyServerState(nextState) {
+      state.apps = Array.isArray(nextState?.apps) ? nextState.apps : [];
+      state.trashApps = Array.isArray(nextState?.trashApps) ? nextState.trashApps : [];
+      state.trashFiles = Array.isArray(nextState?.trashFiles) ? nextState.trashFiles : [];
+      state.activeId = nextState?.activeId || state.apps[0]?.id || null;
+      state.theme = nextState?.theme === "light" ? "light" : "dark";
+      if (state.activeId && !state.apps.some((a) => a.id === state.activeId)) {
+        state.activeId = state.apps[0]?.id || null;
+      }
+      document.body.classList.toggle("theme-light", state.theme === "light");
+      syncThemeLabel();
+    }
+
+    function persistNow() {
+      if (persistInFlight) {
+        persistQueued = true;
+        return;
+      }
+      persistInFlight = true;
+      setBackendHealth("saving", "Saving...");
+      requestJSON("/api/state", {
+        method: "PUT",
+        body: JSON.stringify({ state: currentStatePayload() }),
+      })
+        .then(() => {
+          lastBackendSaveAt = nowIso();
+          setBackendHealth("connected", `Connected • Saved ${formatTimeShort(lastBackendSaveAt)}`);
+        })
+        .catch(() => {
+          setBackendHealth("disconnected", "Backend offline");
+          showToast("Could not save to backend.", "error");
+        })
+        .finally(() => {
+          persistInFlight = false;
+          if (persistQueued) {
+            persistQueued = false;
+            persistNow();
+          }
+        });
+    }
+
+    function persist() {
+      if (persistTimer) clearTimeout(persistTimer);
+      persistTimer = setTimeout(() => {
+        persistTimer = null;
+        persistNow();
+      }, 220);
+    }
+
+    async function hydrate() {
+      try {
+        const payload = await requestJSON("/api/state");
+        applyServerState(payload.state || {});
+        setBackendHealth("connected", "Connected");
+      } catch {
+        state.apps = [];
+        state.trashApps = [];
+        state.trashFiles = [];
+        state.activeId = null;
+        state.theme = "dark";
+        document.body.classList.toggle("theme-light", false);
+        syncThemeLabel();
+        setBackendHealth("disconnected", "Backend offline");
+        showToast("Backend unavailable. Start server.js", "error");
       }
 
-      if (!state.apps.length) {
+      if (!state.apps.length && !state.trashApps.length && !state.trashFiles.length) {
         state.apps = [
           createApp({ company: "Q2", title: "Software Engineer", location: "Austin, TX", workMode: "Hybrid" }),
           createApp({ company: "AWS", title: "Security Automation Engineer", location: "Austin, TX", workMode: "On-site" }),
         ];
+        state.activeId = state.apps[0]?.id || null;
+        persist();
       }
 
-      state.activeId = state.activeId || state.apps[0]?.id || null;
-      document.body.classList.toggle("theme-light", state.theme === "light");
-      syncThemeLabel();
       const savedWidth = Number(localStorage.getItem(LEFT_WIDTH_KEY));
       if (savedWidth && Number.isFinite(savedWidth)) {
         const clamped = Math.max(LEFT_PANEL_MIN, Math.min(LEFT_PANEL_MAX, savedWidth));
         document.documentElement.style.setProperty("--left-panel-width", `${clamped}px`);
+      }
+    }
+
+    async function pingBackendHealth() {
+      try {
+        await requestJSON("/api/health");
+        if (!persistInFlight) {
+          const label = lastBackendSaveAt ? `Connected • Saved ${formatTimeShort(lastBackendSaveAt)}` : "Connected";
+          setBackendHealth("connected", label);
+        }
+      } catch {
+        setBackendHealth("disconnected", "Backend offline");
       }
     }
 
@@ -1432,6 +1621,147 @@
       newMode.value = "Unknown";
     }
 
+    function moveAppToTrash(appId) {
+      const idx = state.apps.findIndex((a) => a.id === appId);
+      if (idx === -1) return;
+      const [app] = state.apps.splice(idx, 1);
+      app.deletedAt = nowIso();
+      state.trashApps.unshift(app);
+      if (state.activeId === appId) {
+        state.activeId = filteredApps()[0]?.id || state.apps[0]?.id || null;
+      }
+      persist();
+      render();
+      showToast("Application moved to trash.", "warn");
+    }
+
+    function restoreAppFromTrash(appId) {
+      const idx = state.trashApps.findIndex((a) => a.id === appId);
+      if (idx === -1) return;
+      const [app] = state.trashApps.splice(idx, 1);
+      app.deletedAt = "";
+      app.updatedAt = nowIso();
+      state.apps.unshift(app);
+      state.activeId = app.id;
+      persist();
+      render();
+      renderTrashDialog();
+      showToast("Application restored.", "success");
+    }
+
+    async function purgeAppFromTrash(appId) {
+      const idx = state.trashApps.findIndex((a) => a.id === appId);
+      if (idx === -1) return;
+      const app = state.trashApps[idx];
+      const ok = window.confirm(`Permanently delete \"${app.title}\" at \"${app.company}\"?`);
+      if (!ok) return;
+      const files = Array.isArray(app.workspaceFiles) ? app.workspaceFiles : [];
+      for (const file of files) {
+        if (!file?.id) continue;
+        try {
+          await requestJSON(`/api/files/${encodeURIComponent(file.id)}/purge`, { method: "DELETE" });
+        } catch {}
+      }
+      state.trashApps.splice(idx, 1);
+      persist();
+      renderTrashDialog();
+      showToast("Permanently deleted.", "warn");
+    }
+
+    async function restoreFileFromTrash(fileId) {
+      try {
+        const result = await requestJSON(`/api/files/${encodeURIComponent(fileId)}/restore`, {
+          method: "POST",
+          body: JSON.stringify({ appId: state.activeId || "" }),
+        });
+        applyServerState(result.state || {});
+        render();
+        renderTrashDialog();
+        showToast("File restored.", "success");
+      } catch {
+        showToast("Could not restore file.", "error");
+      }
+    }
+
+    async function purgeFileFromTrash(fileId, fileName) {
+      const ok = window.confirm(`Permanently delete file \"${fileName || "file"}\"?`);
+      if (!ok) return;
+      try {
+        const result = await requestJSON(`/api/files/${encodeURIComponent(fileId)}/purge`, { method: "DELETE" });
+        applyServerState(result.state || {});
+        render();
+        renderTrashDialog();
+        showToast("File permanently deleted.", "warn");
+      } catch {
+        showToast("Could not purge file.", "error");
+      }
+    }
+
+    function openTrashDialog() {
+      renderTrashDialog();
+      trashDialog.classList.add("open");
+    }
+
+    function closeTrashDialog() {
+      trashDialog.classList.remove("open");
+    }
+
+    function renderTrashDialog() {
+      if (!state.trashApps.length) {
+        trashAppsList.innerHTML = `<div class=\"small\">No deleted applications.</div>`;
+      } else {
+        trashAppsList.innerHTML = state.trashApps
+        .map((app) => `
+          <div class="status-history-item">
+            <div style="display:grid; gap:0.16rem;">
+              <strong style="font-size:0.8rem;">${escapeHtml(app.title)}</strong>
+              <span class="small">${escapeHtml(app.company)}${app.location ? ` • ${escapeHtml(app.location)}` : ""}</span>
+              <span class="small">Deleted ${escapeHtml(fmtDate(app.deletedAt || app.updatedAt || nowIso()))}</span>
+            </div>
+            <div style="display:flex; gap:0.4rem;">
+              <button class="btn" data-trash-restore="${app.id}">Restore</button>
+              <button class="btn" data-trash-purge="${app.id}">Delete</button>
+            </div>
+          </div>
+        `)
+        .join("");
+      }
+
+      trashAppsList.querySelectorAll("[data-trash-restore]").forEach((btn) => {
+        btn.addEventListener("click", () => restoreAppFromTrash(btn.dataset.trashRestore));
+      });
+      trashAppsList.querySelectorAll("[data-trash-purge]").forEach((btn) => {
+        btn.addEventListener("click", () => purgeAppFromTrash(btn.dataset.trashPurge));
+      });
+
+      if (!state.trashFiles.length) {
+        trashFilesList.innerHTML = `<div class=\"small\">No deleted files.</div>`;
+      } else {
+        trashFilesList.innerHTML = state.trashFiles
+          .map((file) => `
+            <div class="status-history-item">
+              <div style="display:grid; gap:0.16rem;">
+                <strong style="font-size:0.8rem;">${escapeHtml(file.name || "Untitled file")}</strong>
+                <span class="small">From app: ${escapeHtml((state.apps.find((a) => a.id === file.appId) || state.trashApps.find((a) => a.id === file.appId))?.title || "Original app removed")}</span>
+                <span class="small">Deleted ${escapeHtml(fmtDate(file.deletedAt || nowIso()))}</span>
+              </div>
+              <div style="display:flex; gap:0.4rem;">
+                <button class="btn" data-trash-file-restore="${file.id}">Restore</button>
+                <button class="btn" data-trash-file-purge="${file.id}" data-trash-file-name="${escapeHtml(file.name || "")}">Delete</button>
+              </div>
+            </div>
+          `)
+          .join("");
+      }
+
+      trashFilesList.querySelectorAll("[data-trash-file-restore]").forEach((btn) => {
+        btn.addEventListener("click", () => restoreFileFromTrash(btn.dataset.trashFileRestore));
+      });
+      trashFilesList.querySelectorAll("[data-trash-file-purge]").forEach((btn) => {
+        btn.addEventListener("click", () => purgeFileFromTrash(btn.dataset.trashFilePurge, btn.dataset.trashFileName || ""));
+      });
+    }
+
     function renderList() {
       const apps = filteredApps();
       countLabel.textContent = `Applications (${apps.length})`;
@@ -1494,16 +1824,9 @@
           const appId = btn.dataset.id;
           const app = state.apps.find((a) => a.id === appId);
           if (!app) return;
-          const confirmed = window.confirm(`Delete "${app.title}" at "${app.company}"?`);
+          const confirmed = window.confirm(`Move "${app.title}" at "${app.company}" to trash?`);
           if (!confirmed) return;
-          const idx = state.apps.findIndex((a) => a.id === appId);
-          if (idx >= 0) state.apps.splice(idx, 1);
-          if (state.activeId === appId) {
-            state.activeId = filteredApps()[0]?.id || state.apps[0]?.id || null;
-          }
-          persist();
-          render();
-          showToast("Application deleted.", "warn");
+          moveAppToTrash(appId);
         });
       });
     }
@@ -1538,9 +1861,10 @@
       } else {
         app.workspaceFiles = app.workspaceFiles
           .map((f) => {
-            if (typeof f === "string") return { name: f, size: null, type: "" };
+            if (typeof f === "string") return { id: uid(), name: f, size: null, type: "" };
             if (!f || typeof f !== "object") return null;
             return {
+              id: typeof f.id === "string" && f.id ? f.id : uid(),
               name: typeof f.name === "string" ? f.name : "Untitled file",
               size: Number.isFinite(f.size) ? f.size : null,
               type: typeof f.type === "string" ? f.type : "",
@@ -1571,6 +1895,19 @@
       if (type.includes("sheet") || name.endsWith(".xls") || name.endsWith(".xlsx") || name.endsWith(".csv")) return "SHEET";
       if (type.startsWith("text/") || name.endsWith(".txt") || name.endsWith(".md")) return "TEXT";
       return "FILE";
+    }
+
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = String(reader.result || "");
+          const base64 = result.includes(",") ? result.split(",")[1] : result;
+          resolve(base64);
+        };
+        reader.onerror = () => reject(new Error("Could not read file"));
+        reader.readAsDataURL(file);
+      });
     }
 
     function renderStatusHistory(app) {
@@ -1753,7 +2090,7 @@
         drop.classList.add("has-files");
         filesEl.innerHTML = app.workspaceFiles
           .map((file, index) => `
-            <article class="file-tile" title="${escapeHtml(file.name)}">
+            <article class="file-tile" title="${escapeHtml(file.name)}" data-file-id="${escapeHtml(file.id || "")}">
               <div class="file-tile-head">
                 <span class="file-type">${escapeHtml(getFileBadge(file))}</span>
                 <button class="file-remove-btn" type="button" data-file-index="${index}" aria-label="Remove ${escapeHtml(file.name)}">×</button>
@@ -1765,7 +2102,7 @@
           .join("");
 
         filesEl.querySelectorAll(".file-remove-btn").forEach((btn) => {
-          btn.addEventListener("click", (e) => {
+          btn.addEventListener("click", async (e) => {
             e.preventDefault();
             e.stopPropagation();
             const idx = Number(btn.dataset.fileIndex);
@@ -1773,22 +2110,51 @@
             const fileName = app.workspaceFiles[idx]?.name || "this file";
             const confirmed = window.confirm(`Remove "${fileName}" from workspace files?`);
             if (!confirmed) return;
-            app.workspaceFiles.splice(idx, 1);
-            app.updatedAt = nowIso();
-            persist();
-            renderWorkspaceFiles();
+            const fileId = app.workspaceFiles[idx]?.id;
+            if (fileId) {
+              try {
+                const result = await requestJSON(`/api/files/${encodeURIComponent(fileId)}`, { method: "DELETE" });
+                applyServerState(result.state || {});
+              } catch {
+                showToast(`Could not remove ${fileName}`, "error");
+                return;
+              }
+            }
+            render();
+            renderTrashDialog();
             scheduleSavedToast();
+          });
+        });
+
+        filesEl.querySelectorAll(".file-tile").forEach((tile) => {
+          tile.addEventListener("click", (e) => {
+            if (e.target.closest(".file-remove-btn")) return;
+            const fileId = tile.dataset.fileId;
+            if (!fileId) return;
+            window.location.href = `/api/files/${encodeURIComponent(fileId)}/download`;
           });
         });
       }
 
-      function addWorkspaceFiles(fileList) {
-        for (const file of fileList) {
-          app.workspaceFiles.push({
-            name: file.name,
-            size: Number.isFinite(file.size) ? file.size : null,
-            type: file.type || "",
-          });
+      async function addWorkspaceFiles(fileList) {
+        const files = Array.from(fileList || []);
+        for (const file of files) {
+          try {
+            const contentBase64 = await fileToBase64(file);
+            const payload = await requestJSON("/api/files/upload", {
+              method: "POST",
+              body: JSON.stringify({
+                appId: app.id,
+                name: file.name,
+                size: Number.isFinite(file.size) ? file.size : null,
+                type: file.type || "",
+                contentBase64,
+              }),
+            });
+            app.workspaceFiles.push(payload.file);
+          } catch {
+            showToast(`Could not upload ${file.name}`, "error");
+          }
         }
         app.updatedAt = nowIso();
         persist();
@@ -1797,9 +2163,13 @@
       }
 
       renderWorkspaceFiles();
-      drop.addEventListener("click", () => fileInput.click());
-      fileInput.addEventListener("change", (e) => {
-        if (e.target.files) addWorkspaceFiles(e.target.files);
+      drop.addEventListener("click", (e) => {
+        if (e.target.closest(".workspace-files")) return;
+        fileInput.click();
+      });
+      fileInput.addEventListener("change", async (e) => {
+        if (e.target.files) await addWorkspaceFiles(e.target.files);
+        fileInput.value = "";
       });
 
       ["dragenter", "dragover"].forEach((evt) => {
@@ -1818,8 +2188,8 @@
         });
       });
 
-      drop.addEventListener("drop", (e) => {
-        if (e.dataTransfer?.files) addWorkspaceFiles(e.dataTransfer.files);
+      drop.addEventListener("drop", async (e) => {
+        if (e.dataTransfer?.files) await addWorkspaceFiles(e.dataTransfer.files);
       });
 
       const descriptionInput = document.getElementById("descriptionInput");
@@ -1837,14 +2207,9 @@
       });
 
       document.getElementById("deleteAppBtn").addEventListener("click", () => {
-        const confirmed = window.confirm("Delete this application?");
+        const confirmed = window.confirm("Move this application to trash?");
         if (!confirmed) return;
-        const idx = state.apps.findIndex((a) => a.id === app.id);
-        if (idx >= 0) state.apps.splice(idx, 1);
-        state.activeId = filteredApps()[0]?.id || state.apps[0]?.id || null;
-        persist();
-        render();
-        showToast("Application deleted.", "warn");
+        moveAppToTrash(app.id);
       });
     }
 
@@ -1902,6 +2267,8 @@
         theme: state.theme,
         activeId: state.activeId,
         apps: state.apps,
+        trashApps: state.trashApps,
+        trashFiles: state.trashFiles,
       };
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -1937,6 +2304,16 @@
         });
         return { ...base, ...app };
       });
+      state.trashApps = Array.isArray(parsed?.trashApps) ? parsed.trashApps.map((app) => {
+        const base = createApp({
+          company: app.company || "Company",
+          title: app.title || "Role",
+          location: app.location || "",
+          workMode: app.workMode || "Unknown",
+        });
+        return { ...base, ...app };
+      }) : [];
+      state.trashFiles = Array.isArray(parsed?.trashFiles) ? parsed.trashFiles : [];
       state.activeId = state.apps[0]?.id || null;
       if (parsed?.theme === "light" || parsed?.theme === "dark") {
         state.theme = parsed.theme;
@@ -2064,12 +2441,23 @@
       importInput.value = "";
     });
 
+    retryBackendBtn.addEventListener("click", async () => {
+      await hydrate();
+      render();
+      pingBackendHealth();
+    });
+
     newBtn.addEventListener("click", openNewDialog);
     newCancel.addEventListener("click", closeNewDialog);
     newCreate.addEventListener("click", createFromDialog);
+    trashBtn.addEventListener("click", openTrashDialog);
+    trashClose.addEventListener("click", closeTrashDialog);
 
     newDialog.addEventListener("click", (e) => {
       if (e.target === newDialog) closeNewDialog();
+    });
+    trashDialog.addEventListener("click", (e) => {
+      if (e.target === trashDialog) closeTrashDialog();
     });
 
     newDialog.addEventListener("keydown", (e) => {
@@ -2168,13 +2556,18 @@
         filtersMenu.classList.remove("open");
         closeSearchPopover();
         closeStatusDialog();
+        closeTrashDialog();
         closeNewDialog();
       }
     });
 
-    hydrate();
-    setupColumnResizer();
-    render();
+    (async () => {
+      await hydrate();
+      setupColumnResizer();
+      render();
+      pingBackendHealth();
+      setInterval(pingBackendHealth, 30000);
+    })();
   </script>
 </body>
 </html>
