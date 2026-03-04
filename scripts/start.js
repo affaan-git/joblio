@@ -1,0 +1,96 @@
+#!/usr/bin/env node
+'use strict';
+
+const fs = require('node:fs');
+const fsp = require('node:fs/promises');
+const path = require('node:path');
+const { spawn } = require('node:child_process');
+
+const root = path.resolve(__dirname, '..');
+const dataDir = path.join(root, '.joblio-data');
+const configPath = path.join(dataDir, 'config.env');
+
+function parseEnvText(text) {
+  const out = {};
+  const lines = String(text || '').split(/\r?\n/);
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t || t.startsWith('#')) continue;
+    const idx = t.indexOf('=');
+    if (idx < 1) continue;
+    const key = t.slice(0, idx).trim();
+    const value = t.slice(idx + 1).trim();
+    if (!key) continue;
+    out[key] = value;
+  }
+  return out;
+}
+
+async function loadConfigEnv() {
+  const raw = await fsp.readFile(configPath, 'utf8');
+  return parseEnvText(raw);
+}
+
+function runWithEnv(cmd, args, env) {
+  return new Promise((resolve) => {
+    const child = spawn(cmd, args, { cwd: root, env, stdio: 'inherit' });
+    child.on('exit', (code, signal) => resolve({ code, signal }));
+    child.on('error', (error) => resolve({ code: 1, signal: null, error }));
+  });
+}
+
+async function ensureSetup() {
+  const exists = fs.existsSync(configPath);
+  if (exists) return true;
+  const setupEnv = { ...process.env };
+  if (!setupEnv.JOBLIO_SETUP_NON_INTERACTIVE && !process.stdin.isTTY) {
+    setupEnv.JOBLIO_SETUP_NON_INTERACTIVE = '1';
+  }
+  const result = await runWithEnv(process.execPath, ['./scripts/setup.js'], setupEnv);
+  return result.code === 0;
+}
+
+async function main() {
+  await fsp.mkdir(dataDir, { recursive: true });
+  const setupOk = await ensureSetup();
+  if (!setupOk) {
+    console.error('Startup aborted: setup did not complete.');
+    process.exit(1);
+  }
+
+  if (!fs.existsSync(configPath)) {
+    console.error('Startup aborted: missing .joblio-data/config.env. Run `npm run setup`.');
+    process.exit(1);
+  }
+
+  const configEnv = await loadConfigEnv();
+  const env = {
+    ...configEnv,
+    ...process.env,
+  };
+
+  const preflight = await runWithEnv(process.execPath, ['./scripts/preflight.js'], env);
+  if (preflight.code !== 0) process.exit(preflight.code || 1);
+
+  const protocol = String(env.JOBLIO_TLS_MODE || '').toLowerCase() === 'off' ? 'http' : 'https';
+  const host = env.HOST || '127.0.0.1';
+  const port = env.PORT || '8787';
+  console.log(`Starting Joblio on ${protocol}://${host}:${port}`);
+  console.log('Use your configured Basic Auth credentials to sign in.');
+
+  const server = spawn(process.execPath, ['server.js'], { cwd: root, env, stdio: 'inherit' });
+  const relay = (signal) => {
+    try { server.kill(signal); } catch {}
+  };
+  process.on('SIGINT', () => relay('SIGINT'));
+  process.on('SIGTERM', () => relay('SIGTERM'));
+  server.on('exit', (code, signal) => {
+    if (signal) process.kill(process.pid, signal);
+    process.exit(code || 0);
+  });
+}
+
+main().catch((err) => {
+  console.error(`Startup failed: ${err?.message || String(err)}`);
+  process.exit(1);
+});

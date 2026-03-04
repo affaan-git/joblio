@@ -1,0 +1,9 @@
+.git
+.gitignore
+.joblio-data
+backups
+docker-data
+README.md
+*.log
+*.tmp
+*.DS_Store

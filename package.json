@@ -5,8 +5,8 @@
   "description": "Joblio local tracker backend + UI",
   "scripts": {
     "preflight": "node ./scripts/preflight.js",
-    "start": "node ./scripts/setup-local.js",
-    "start:manual": "npm run preflight && node server.js",
+    "setup": "node ./scripts/setup.js",
+    "start": "node ./scripts/start.js",
     "auth:hash": "node ./scripts/gen-auth-hash.js",
     "tls:gen": "node ./scripts/gen-local-tls.js",
     "test:security": "node --test ./scripts/security-tests.js",
