@@ -23,36 +23,7 @@ A local, single-user job application tracker.
 - `Node.js 20+`
 - `OpenSSL (for TLS cert/key paths using npm run tls:gen)`
 
-### Quick Start
-
-```sh
-gitclone https://github.com/affaan-git/joblio.git
-cd joblio
-npm start
-```
-
-> This will first launch into interactive setup if no config is found then automatically start Joblio.
-
-### Usage
-
-Once setup/inital run is complete, running `npm start` will load the existing config and start Joblio.
-
-Reconfiguration:
-
-- Run `npm setup` to prompt for updating existing config
-- Run `npm run reconfigure` to open edit flow directly for existing config
-
-
-## Setup
-
-### Host install
-
-1. Ensure TLS cert/key paths are available.
-2. Run interactive setup and choose secure values.
-3. Start service.
-4. Run validation suite.
-
-Commands (same on macOS/Linux/Windows PowerShell):
+## Installation
 
 Clone repository
 
@@ -81,14 +52,23 @@ Recommended choices during setup:
 - Strong password (12+ chars minimum; longer recommended)
 - Avoid `0.0.0.0` and public interface binding unless you are intentionally operating behind strict network controls.
 
-Start Joblio and run validation tests
+Start Joblio and run validation
 
 ```sh
 npm start
 npm run validate:release
 ```
 
-## Docker
+### Usage and Reconfiguration
+
+After installation, running `npm start` will load the existing config and start Joblio, accessible from the web url printed to console.
+
+Later reconfiguration if wanted:
+
+- Run `npm setup` to prompt for updating existing config
+- Run `npm run reconfigure` to open edit flow directly for existing config
+
+## Docker support
 
 Files:
 
