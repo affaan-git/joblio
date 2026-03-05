@@ -1,39 +1,11 @@
-# Joblio v1
+# Joblio
 
-Joblio is a local-first, single-user job application tracker with a hardened backend and local disk persistence.
+A local, single-user job application tracker.
 
-## Quick Copy-Paste
+![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js)
+![JavaScript](https://img.shields.io/badge/JavaScript-ES6%2B-F7DF1E?logo=javascript)
 
-### macOS/Linux
-
-```bash
-cd tracker
-npm run setup
-npm start
-```
-
-### Windows PowerShell
-
-```powershell
-cd tracker
-npm run setup
-npm start
-```
-
-Reconfigure later (both platforms):
-
-```bash
-npm run reconfigure
-```
-
-Docker (all platforms, first-time setup + run):
-
-```bash
-cd tracker
-docker compose build
-docker compose run --rm -it joblio npm run setup
-docker compose up -d
-```
+> NOTE: Joblio is NOT recommended to be exposed past local network. Use at own risk.
 
 ## What Joblio Does
 
@@ -42,23 +14,120 @@ docker compose up -d
 - Supports trash/restore/purge flows for apps and files
 - Supports import/export of tracker state
 - Supports backup/restore of on-disk data
-- Enforces strict auth/session/CSRF/security headers/rate limits
+- Uses auth/session/CSRF/security headers/rate limits
+
+## Getting Started
+
+### Prerequisites
+
+- `Node.js 20+`
+- `OpenSSL (for TLS cert/key paths using npm run tls:gen)`
+
+### Quick Start
+
+```sh
+gitclone https://github.com/affaan-git/joblio.git
+cd joblio
+npm start
+```
+
+> This will first launch into interactive setup if no config is found then automatically start Joblio.
+
+### Usage
+
+Once setup/inital run is complete, running `npm start` will load the existing config and start Joblio.
+
+Reconfiguration:
+
+- Run `npm setup` to prompt for updating existing config
+- Run `npm run reconfigure` to open edit flow directly for existing config
+
+
+## Setup
+
+### Host install
+
+1. Ensure TLS cert/key paths are available.
+2. Run interactive setup and choose secure values.
+3. Start service.
+4. Run validation suite.
+
+Commands (same on macOS/Linux/Windows PowerShell):
+
+Clone repository
+
+```sh
+gitclone https://github.com/affaan-git/joblio.git
+cd joblio
+```
+
+Create TLS cert/key paths
+
+```sh
+npm run tls:gen
+```
+
+Start setup
+
+```sh
+npm run setup
+```
+
+Recommended choices during setup:
+
+- Host: `127.0.0.1` (or explicit private interface if required)
+- Allow remote binding: `No` unless required
+- TLS mode: `require`
+- Strong password (12+ chars minimum; longer recommended)
+- Avoid `0.0.0.0` and public interface binding unless you are intentionally operating behind strict network controls.
+
+Start Joblio and run validation tests
+
+```sh
+npm start
+npm run validate:release
+```
+
+## Docker
+
+Files:
+
+- `Dockerfile`
+- `docker-compose.yml`
+
+First-time container setup:
+
+```shell
+cd tracker
+docker compose build
+docker compose run --rm -it joblio npm run setup
+```
+
+Important for Docker setup prompts:
+
+- Keep host and remote-binding choices as restrictive as your deployment allows.
+- Prefer loopback-only host publishing from Docker (default: `127.0.0.1:8787:8787`) and avoid public exposure.
+- Use TLS settings appropriate for containerized cert paths if enabling HTTPS
+
+Start service:
+
+```shell
+docker compose up -d
+```
+
+Persistent data is mounted at `tracker/docker-data` -> `/app/.joblio-data`
 
 ## Architecture
 
-- Frontend: `Joblio.html`
-- Backend: `server.js` (serves UI and API)
-- Scripts: `scripts/`
+- JavaScript Frontend: `Joblio.html`
+- Node.js Backend: `server.js` (serves UI and API)
+- JavsScript Scripts: `scripts/`
 - Data directory: `.joblio-data/`
 
 Single-process Node.js app. No external database required.
 
-## Startup Model
+## `npm start` behavior
 
-1. `npm run setup` (interactive only)
-2. `npm start`
-
-`npm start` behavior:
 - Loads `.joblio-data/config.env`
 - Runs preflight validation
 - Starts backend server
@@ -82,45 +151,42 @@ If config is missing and startup is non-interactive, startup fails with guidance
 - Required on all write methods (`POST`, `PUT`, `PATCH`, `DELETE`)
 - Header: `X-Joblio-CSRF`
 
-### Session hardening
+### Session
 
 - Idle timeout + absolute timeout
 - Session binding mode (`strict`, `ip`, `ua`, `off`)
 - Encrypted on-disk session store (`sessions.enc`)
 - Global revoke-all sessions endpoint
 
-### Request hardening
+### Request
 
 - Origin/referer checks on writes
 - Rate limiting by route family
 - Request size limits
-- Safe file/path/id validation
+- File/path/id validation
 
-### Response hardening
+### Response
 
 - Security headers (CSP, frame deny, nosniff, etc.)
 - Generic 500 errors unless verbose mode explicitly enabled
 - Public-safe mapping of thrown 4xx errors
 
-### Trust boundary
-
-Anything in browser memory/UI is untrusted. High-value secrets remain server-side.
-
 ### Network exposure risk
 
 - Do not bind Joblio to `0.0.0.0` or a public interface unless you explicitly need remote access and have network protections in place.
 - Default-safe posture is loopback-only (`127.0.0.1`) with remote binding disabled.
-- Exposing Joblio directly to public networks increases attack surface and is not recommended for v1.
+- Exposing Joblio directly to public networks increases attack surface and is not recommended.
 
 ## Interactive Setup (Detailed)
 
 Run:
 
-```bash
+```sh
 npm run setup
 ```
 
 Setup prompts for:
+
 - Basic Auth username
 - Basic Auth password (hidden; confirmation required)
 - Host
@@ -131,75 +197,21 @@ Setup prompts for:
 - TLS key path
 
 Setup output:
+
 - Writes `.joblio-data/config.env`
 - Stores password hash only (`scrypt$...`), never plaintext
-- Generates strong random values for:
+- Generates random values for:
   - `JOBLIO_API_TOKEN`
   - `JOBLIO_AUDIT_KEY`
 
 Setup file permissions:
+
 - Attempts restrictive permissions (`0600`) on config file
 
 Updating existing config:
+
 - Running setup again prompts whether to update existing config
 - `npm run reconfigure` opens edit flow directly for existing config
-
-## Production Deployment
-
-### Host install
-
-1. Ensure TLS cert/key paths are available.
-2. Run interactive setup and choose secure values.
-3. Start service.
-4. Run validation suite.
-
-Commands (same on macOS/Linux/Windows PowerShell):
-
-```bash
-cd tracker
-npm run setup
-npm start
-npm run validate:release
-```
-
-Recommended production choices during setup:
-- Host: `127.0.0.1` (or explicit private interface if required)
-- Allow remote binding: `No` unless required
-- TLS mode: `require`
-- Strong password (12+ chars minimum; longer recommended)
-- Avoid `0.0.0.0` and public interface binding unless you are intentionally operating behind strict network controls.
-
-## Docker Deployment
-
-Files:
-- `Dockerfile`
-- `docker-compose.yml`
-
-First-time container setup:
-
-```bash
-cd tracker
-docker compose build
-docker compose run --rm -it joblio npm run setup
-```
-
-Important for Docker setup prompts:
-- Keep host and remote-binding choices as restrictive as your deployment allows.
-- Prefer loopback-only host publishing from Docker (`127.0.0.1:8787:8787`) and avoid public exposure.
-- Use TLS settings appropriate for containerized cert paths if enabling HTTPS
-
-Start service:
-
-```bash
-docker compose up -d
-```
-
-Persistent data:
-- Mounted at `tracker/docker-data` -> `/app/.joblio-data`
-
-Container security:
-- Runs as non-root user
-- Only loopback host port is exposed by default in compose (`127.0.0.1:8787:8787`)
 
 ## Configuration Reference (`.joblio-data/config.env`)
 
