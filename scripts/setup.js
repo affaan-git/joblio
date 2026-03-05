@@ -30,6 +30,13 @@ function parsePort(v, fallback = 8787) {
   return n;
 }
 
+function parseIntInRange(v, fallback, min, max) {
+  const n = Number(v);
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return fallback;
+  if (n < min || n > max) return fallback;
+  return n;
+}
+
 function isValidTlsMode(v) {
   return new Set(['off', 'on', 'require']).has(v);
 }
@@ -174,6 +181,50 @@ async function askInteractive(existing, options = {}) {
       }
     }
 
+    const defaultRateAuthSession = parseIntInRange(existing.RATE_MAX_AUTH_SESSION, 45, 1, 100000);
+    const rateAuthSessionRaw = await rl.question(`Auth session rate limit per window [${defaultRateAuthSession}]: `);
+    const rateMaxAuthSession = parseIntInRange(rateAuthSessionRaw, defaultRateAuthSession, 1, 100000);
+
+    const defaultAuthFailWindowMs = parseIntInRange(existing.AUTH_FAIL_WINDOW_MS, 10 * 60 * 1000, 1000, 24 * 60 * 60 * 1000);
+    const authFailWindowRaw = await rl.question(`Auth failure window (ms) [${defaultAuthFailWindowMs}]: `);
+    const authFailWindowMs = parseIntInRange(authFailWindowRaw, defaultAuthFailWindowMs, 1000, 24 * 60 * 60 * 1000);
+
+    const defaultAuthFailThreshold = parseIntInRange(existing.AUTH_FAIL_THRESHOLD, 5, 1, 1000);
+    const authFailThresholdRaw = await rl.question(`Auth failure threshold [${defaultAuthFailThreshold}]: `);
+    const authFailThreshold = parseIntInRange(authFailThresholdRaw, defaultAuthFailThreshold, 1, 1000);
+
+    const defaultAuthLockoutMs = parseIntInRange(existing.AUTH_LOCKOUT_MS, 15 * 60 * 1000, 1000, 24 * 60 * 60 * 1000);
+    const authLockoutRaw = await rl.question(`Auth lockout duration (ms) [${defaultAuthLockoutMs}]: `);
+    const authLockoutMs = parseIntInRange(authLockoutRaw, defaultAuthLockoutMs, 1000, 24 * 60 * 60 * 1000);
+
+    const defaultAuthBackoffBaseMs = parseIntInRange(existing.AUTH_BACKOFF_BASE_MS, 250, 0, 60000);
+    const authBackoffBaseRaw = await rl.question(`Auth backoff base (ms) [${defaultAuthBackoffBaseMs}]: `);
+    const authBackoffBaseMs = parseIntInRange(authBackoffBaseRaw, defaultAuthBackoffBaseMs, 0, 60000);
+
+    const defaultAuthBackoffMaxMs = parseIntInRange(existing.AUTH_BACKOFF_MAX_MS, 2000, 0, 60000);
+    const authBackoffMaxRaw = await rl.question(`Auth backoff max (ms) [${defaultAuthBackoffMaxMs}]: `);
+    const authBackoffMaxMs = parseIntInRange(authBackoffMaxRaw, defaultAuthBackoffMaxMs, 0, 60000);
+
+    const defaultAuthBackoffStartAfter = parseIntInRange(existing.AUTH_BACKOFF_START_AFTER, 2, 1, 1000);
+    const authBackoffStartAfterRaw = await rl.question(`Auth backoff start after failures [${defaultAuthBackoffStartAfter}]: `);
+    const authBackoffStartAfter = parseIntInRange(authBackoffStartAfterRaw, defaultAuthBackoffStartAfter, 1, 1000);
+
+    if (authBackoffBaseMs > authBackoffMaxMs) {
+      throw new Error('Auth backoff base must be less than or equal to auth backoff max.');
+    }
+
+    const defaultAuthGuardMaxEntries = parseIntInRange(existing.AUTH_GUARD_MAX_ENTRIES, 20000, 100, 1000000);
+    const authGuardMaxEntriesRaw = await rl.question(`Auth guard max entries [${defaultAuthGuardMaxEntries}]: `);
+    const authGuardMaxEntries = parseIntInRange(authGuardMaxEntriesRaw, defaultAuthGuardMaxEntries, 100, 1000000);
+
+    const defaultTrustProxy = sanitizeValue(existing.JOBLIO_TRUST_PROXY || '0') === '1';
+    const trustProxyRaw = await rl.question(`Trust proxy headers for client IP? (${defaultTrustProxy ? 'Y/n' : 'y/N'}): `);
+    const trustProxy = parseBoolText(trustProxyRaw, defaultTrustProxy) ? '1' : '0';
+
+    const defaultAllowlist = sanitizeValue(existing.JOBLIO_IP_ALLOWLIST || '');
+    const allowlistRaw = await rl.question(`IP allowlist CSV (blank to disable) [${defaultAllowlist || 'disabled'}]: `);
+    const ipAllowlist = sanitizeValue(allowlistRaw || defaultAllowlist);
+
     return {
       skip: false,
       host,
@@ -184,6 +235,16 @@ async function askInteractive(existing, options = {}) {
       tlsMode,
       certPath,
       keyPath,
+      rateMaxAuthSession,
+      authFailWindowMs,
+      authFailThreshold,
+      authLockoutMs,
+      authBackoffBaseMs,
+      authBackoffMaxMs,
+      authBackoffStartAfter,
+      authGuardMaxEntries,
+      trustProxy,
+      ipAllowlist,
       apiToken: sanitizeValue(existing.JOBLIO_API_TOKEN || randHex(32)),
       auditKey: sanitizeValue(existing.JOBLIO_AUDIT_KEY || randHex(32)),
     };
@@ -212,6 +273,16 @@ async function writeConfig(result) {
     'JOBLIO_SESSION_BINDING=strict',
     'JOBLIO_HEALTH_VERBOSE=0',
     'JOBLIO_ERROR_VERBOSE=0',
+    `RATE_MAX_AUTH_SESSION=${sanitizeValue(result.rateMaxAuthSession)}`,
+    `AUTH_FAIL_WINDOW_MS=${sanitizeValue(result.authFailWindowMs)}`,
+    `AUTH_FAIL_THRESHOLD=${sanitizeValue(result.authFailThreshold)}`,
+    `AUTH_LOCKOUT_MS=${sanitizeValue(result.authLockoutMs)}`,
+    `AUTH_BACKOFF_BASE_MS=${sanitizeValue(result.authBackoffBaseMs)}`,
+    `AUTH_BACKOFF_MAX_MS=${sanitizeValue(result.authBackoffMaxMs)}`,
+    `AUTH_BACKOFF_START_AFTER=${sanitizeValue(result.authBackoffStartAfter)}`,
+    `AUTH_GUARD_MAX_ENTRIES=${sanitizeValue(result.authGuardMaxEntries)}`,
+    `JOBLIO_TRUST_PROXY=${sanitizeValue(result.trustProxy)}`,
+    `JOBLIO_IP_ALLOWLIST=${sanitizeValue(result.ipAllowlist)}`,
     '',
   ];
   const tmp = `${configPath}.tmp`;

@@ -154,6 +154,8 @@ Single-process Node.js app. No external database required.
 - Rate limiting by route family
 - Request size limits
 - File/path/id validation
+- Basic Auth lockout and progressive backoff on repeated failures
+- Optional IP allowlist gate
 
 ### Response
 
@@ -183,6 +185,12 @@ Setup prompts for:
 - TLS mode (`off`, `on`, `require`)
 - TLS cert path
 - TLS key path
+- Auth session rate limit
+- Auth failure window/threshold/lockout
+- Auth backoff base/max/start-after
+- Auth guard max entries
+- Trust proxy headers for client IP
+- IP allowlist CSV
 
 Setup output:
 
@@ -222,6 +230,16 @@ These keys are written by setup and used at runtime.
 | `JOBLIO_SESSION_BINDING` | `strict` | Session binding policy |
 | `JOBLIO_HEALTH_VERBOSE` | `0` | Verbose health policy |
 | `JOBLIO_ERROR_VERBOSE` | `0` | Internal error detail policy |
+| `RATE_MAX_AUTH_SESSION` | `45` | Auth session requests per rate window |
+| `AUTH_FAIL_WINDOW_MS` | `600000` | Failure window for lockout counter |
+| `AUTH_FAIL_THRESHOLD` | `5` | Failures before lockout |
+| `AUTH_LOCKOUT_MS` | `900000` | Lockout duration |
+| `AUTH_BACKOFF_BASE_MS` | `250` | Initial auth failure backoff |
+| `AUTH_BACKOFF_MAX_MS` | `2000` | Maximum auth failure backoff |
+| `AUTH_BACKOFF_START_AFTER` | `2` | Failure count when backoff starts |
+| `AUTH_GUARD_MAX_ENTRIES` | `20000` | In-memory auth guard entry cap |
+| `JOBLIO_TRUST_PROXY` | `0` | Trust `X-Forwarded-For` for client IP |
+| `JOBLIO_IP_ALLOWLIST` | empty | CSV allowlist of source IPs/CIDRs |
 
 Runtime override policy:
 
@@ -246,6 +264,16 @@ These are server-supported keys (advanced operations) that are not currently pro
 | `RATE_MAX_UPLOAD` | `24` | Upload limit per window |
 | `RATE_MAX_DELETE` | `120` | Delete limit per window |
 | `RATE_MAX_IMPORT` | `10` | Import limit per window |
+| `RATE_MAX_AUTH_SESSION` | `45` | Auth session limit per window |
+| `AUTH_FAIL_WINDOW_MS` | `600000` | Auth failure window |
+| `AUTH_FAIL_THRESHOLD` | `5` | Lockout failure threshold |
+| `AUTH_LOCKOUT_MS` | `900000` | Lockout duration |
+| `AUTH_BACKOFF_BASE_MS` | `250` | Backoff base delay |
+| `AUTH_BACKOFF_MAX_MS` | `2000` | Backoff max delay |
+| `AUTH_BACKOFF_START_AFTER` | `2` | Backoff starts after this many failures |
+| `AUTH_GUARD_MAX_ENTRIES` | `20000` | Auth guard entry cap |
+| `JOBLIO_TRUST_PROXY` | `0` | Trust `X-Forwarded-For` |
+| `JOBLIO_IP_ALLOWLIST` | empty | Allowed IPs/CIDRs (CSV) |
 | `SESSION_TTL_MS` | `28800000` | Session idle timeout |
 | `SESSION_ABS_TTL_MS` | `86400000` | Session absolute timeout |
 
@@ -351,3 +379,23 @@ Session invalid behavior:
 Smoke test skipped:
 
 - Some restricted environments do not allow local listen sockets.
+
+## Incident Runbook
+
+Credential attack suspected:
+
+1. Revoke all sessions from UI.
+2. Run `npm run reconfigure` and rotate password.
+3. Keep strict host/binding choices (`127.0.0.1`, remote binding off) unless operationally required.
+4. Tighten auth controls in setup:
+   - Lower `AUTH_FAIL_THRESHOLD`
+   - Increase `AUTH_LOCKOUT_MS`
+   - Reduce `RATE_MAX_AUTH_SESSION`
+5. If running behind proxy, configure and verify `JOBLIO_IP_ALLOWLIST` and only then enable `JOBLIO_TRUST_PROXY`.
+6. Run `npm run validate:release`.
+
+Suspected unauthorized source IP:
+
+1. Add/adjust `JOBLIO_IP_ALLOWLIST` in reconfigure flow.
+2. Keep Docker publish loopback-only.
+3. Restart with `npm start`.

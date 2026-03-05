@@ -8,6 +8,8 @@ const fsp = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { verifyPassword } = require('./lib/auth');
+const { AuthGuard } = require('./lib/auth-guard');
+const { normalizeIp, parseAllowlist, isIpAllowed } = require('./lib/ip-allowlist');
 
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 8787);
@@ -44,6 +46,16 @@ const RATE_MAX_WRITE = Number(process.env.RATE_MAX_WRITE || 180);
 const RATE_MAX_UPLOAD = Number(process.env.RATE_MAX_UPLOAD || 24);
 const RATE_MAX_DELETE = Number(process.env.RATE_MAX_DELETE || 120);
 const RATE_MAX_IMPORT = Number(process.env.RATE_MAX_IMPORT || 10);
+const RATE_MAX_AUTH_SESSION = Number(process.env.RATE_MAX_AUTH_SESSION || 45);
+const AUTH_FAIL_WINDOW_MS = Number(process.env.AUTH_FAIL_WINDOW_MS || 10 * 60 * 1000);
+const AUTH_FAIL_THRESHOLD = Number(process.env.AUTH_FAIL_THRESHOLD || 5);
+const AUTH_LOCKOUT_MS = Number(process.env.AUTH_LOCKOUT_MS || 15 * 60 * 1000);
+const AUTH_BACKOFF_BASE_MS = Number(process.env.AUTH_BACKOFF_BASE_MS || 250);
+const AUTH_BACKOFF_MAX_MS = Number(process.env.AUTH_BACKOFF_MAX_MS || 2000);
+const AUTH_BACKOFF_START_AFTER = Number(process.env.AUTH_BACKOFF_START_AFTER || 2);
+const AUTH_GUARD_MAX_ENTRIES = Number(process.env.AUTH_GUARD_MAX_ENTRIES || 20000);
+const IP_ALLOWLIST = parseAllowlist(process.env.JOBLIO_IP_ALLOWLIST || '');
+const TRUST_PROXY = process.env.JOBLIO_TRUST_PROXY === '1';
 const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 8 * 60 * 60 * 1000);
 const SESSION_ABS_TTL_MS = Number(process.env.SESSION_ABS_TTL_MS || 24 * 60 * 60 * 1000);
 const SESSION_COOKIE_NAME = 'joblio_sid';
@@ -59,6 +71,15 @@ const AUDIT_CHAIN_PATH = path.join(LOG_DIR, 'audit-chain.json');
 const SESSION_STORE_PATH = path.join(DATA_DIR, 'sessions.enc');
 const rateBuckets = new Map();
 const sessions = new Map();
+const authGuard = new AuthGuard({
+  windowMs: AUTH_FAIL_WINDOW_MS,
+  threshold: AUTH_FAIL_THRESHOLD,
+  lockoutMs: AUTH_LOCKOUT_MS,
+  backoffBaseMs: AUTH_BACKOFF_BASE_MS,
+  backoffMaxMs: AUTH_BACKOFF_MAX_MS,
+  backoffStartAfter: AUTH_BACKOFF_START_AFTER,
+  maxEntries: AUTH_GUARD_MAX_ENTRIES,
+});
 
 const DEFAULT_STATE = {
   version: 1,
@@ -161,6 +182,21 @@ function validateStartupConfig() {
   }
   if (!new Set(['off', 'on', 'require']).has(TLS_MODE)) {
     throw new Error('JOBLIO_TLS_MODE must be one of: off, on, require');
+  }
+  if (RATE_MAX_AUTH_SESSION <= 0) {
+    throw new Error('RATE_MAX_AUTH_SESSION must be > 0');
+  }
+  if (AUTH_FAIL_WINDOW_MS <= 0 || AUTH_FAIL_THRESHOLD <= 0 || AUTH_LOCKOUT_MS <= 0) {
+    throw new Error('AUTH_FAIL_WINDOW_MS, AUTH_FAIL_THRESHOLD, and AUTH_LOCKOUT_MS must be > 0');
+  }
+  if (AUTH_BACKOFF_BASE_MS < 0 || AUTH_BACKOFF_MAX_MS < 0 || AUTH_BACKOFF_START_AFTER <= 0) {
+    throw new Error('AUTH backoff settings must be valid positive values');
+  }
+  if (AUTH_BACKOFF_BASE_MS > AUTH_BACKOFF_MAX_MS) {
+    throw new Error('AUTH_BACKOFF_BASE_MS must be <= AUTH_BACKOFF_MAX_MS');
+  }
+  if (AUTH_GUARD_MAX_ENTRIES <= 0) {
+    throw new Error('AUTH_GUARD_MAX_ENTRIES must be > 0');
   }
   if ((TLS_MODE === 'on' || TLS_MODE === 'require') && (!TLS_CERT_PATH || !TLS_KEY_PATH)) {
     throw new Error('TLS enabled but JOBLIO_TLS_CERT_PATH or JOBLIO_TLS_KEY_PATH is missing.');
@@ -572,30 +608,27 @@ function requireWriteAuth(req, res) {
   return true;
 }
 
-function hasValidBasicAuth(req) {
-  if (!STRICT_MODE) return true;
-  if (!BASIC_AUTH_USER || !BASIC_AUTH_HASH) return false;
+function parseBasicAuth(req) {
   const auth = String(req.headers.authorization || '');
-  if (!auth.startsWith('Basic ')) return false;
+  if (!auth.startsWith('Basic ')) return null;
   try {
     const decoded = Buffer.from(auth.slice(6), 'base64').toString('utf8');
     const idx = decoded.indexOf(':');
-    if (idx < 0) return false;
+    if (idx < 0) return null;
     const user = decoded.slice(0, idx);
     const pass = decoded.slice(idx + 1);
-    if (user !== BASIC_AUTH_USER) return false;
-    return verifyPassword(pass, BASIC_AUTH_HASH);
+    return { user, pass };
   } catch {
-    return false;
+    return null;
   }
 }
 
-function requireBasicAuth(req, res) {
-  if (hasValidBasicAuth(req)) return true;
-  const hasHeader = Boolean(String(req.headers.authorization || '').trim());
-  if (hasHeader) {
-    securityEvent('basic_auth_failed', { ip: getClientIp(req), path: req.url || '', method: req.method || '' }, 'warn');
-  }
+function sleep(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return Promise.resolve();
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function challengeBasicAuth(res) {
   applySecurityHeaders(res);
   res.setHeader('WWW-Authenticate', 'Basic realm="Joblio", charset="UTF-8"');
   res.writeHead(401, {
@@ -603,6 +636,75 @@ function requireBasicAuth(req, res) {
     'Cache-Control': 'no-store',
   });
   res.end(JSON.stringify({ error: 'Unauthorized' }));
+}
+
+function denyIpAllowlist(req, res) {
+  const ip = getClientIp(req);
+  securityEvent('ip_allowlist_blocked', { ip, path: req.url || '', method: req.method || '' }, 'warn');
+  json(res, 403, { error: 'Forbidden' });
+  return false;
+}
+
+function requireIpAllowlist(req, res) {
+  if (!IP_ALLOWLIST.length) return true;
+  const ip = getClientIp(req);
+  if (isIpAllowed(ip, IP_ALLOWLIST)) return true;
+  return denyIpAllowlist(req, res);
+}
+
+async function requireBasicAuth(req, res) {
+  if (!STRICT_MODE) return true;
+  if (!BASIC_AUTH_USER || !BASIC_AUTH_HASH) {
+    challengeBasicAuth(res);
+    return false;
+  }
+
+  const creds = parseBasicAuth(req);
+  if (!creds) {
+    challengeBasicAuth(res);
+    return false;
+  }
+
+  const ip = getClientIp(req);
+  const user = str(creds.user, 120).toLowerCase();
+  const lock = authGuard.isLocked(ip, user);
+  if (lock.locked) {
+    res.setHeader('Retry-After', String(lock.retryAfterSec));
+    securityEvent('basic_auth_locked', {
+      ip,
+      user,
+      retryAfterSec: lock.retryAfterSec,
+      path: req.url || '',
+      method: req.method || '',
+    }, 'warn');
+    json(res, 429, { error: 'Too many requests', retryAfterSec: lock.retryAfterSec });
+    return false;
+  }
+
+  const userOk = creds.user === BASIC_AUTH_USER;
+  const passOk = userOk && verifyPassword(creds.pass, BASIC_AUTH_HASH);
+  if (passOk) {
+    authGuard.clear(ip, user);
+    return true;
+  }
+
+  const failure = authGuard.recordFailure(ip, user);
+  if (failure.delayMs > 0) await sleep(failure.delayMs);
+  securityEvent('basic_auth_failed', {
+    ip,
+    user,
+    count: failure.count,
+    locked: failure.locked,
+    delayMs: failure.delayMs,
+    path: req.url || '',
+    method: req.method || '',
+  }, 'warn');
+  if (failure.locked) {
+    res.setHeader('Retry-After', String(failure.retryAfterSec));
+    json(res, 429, { error: 'Too many requests', retryAfterSec: failure.retryAfterSec });
+    return false;
+  }
+  challengeBasicAuth(res);
   return false;
 }
 
@@ -752,12 +854,15 @@ function requireCsrf(req, res, session) {
 }
 
 function getClientIp(req) {
-  const xff = String(req.headers['x-forwarded-for'] || '').trim();
-  if (xff) return xff.split(',')[0].trim();
-  return String(req.socket?.remoteAddress || 'unknown');
+  if (TRUST_PROXY) {
+    const xff = normalizeIp(req.headers['x-forwarded-for']);
+    if (xff) return xff;
+  }
+  return normalizeIp(req.socket?.remoteAddress) || 'unknown';
 }
 
 function routeBucket(pathname, method) {
+  if (pathname === '/api/auth/session' && method === 'POST') return { key: 'auth_session', max: RATE_MAX_AUTH_SESSION };
   if (pathname === '/api/files/upload' && method === 'POST') return { key: 'upload', max: RATE_MAX_UPLOAD };
   if (pathname === '/api/import' && method === 'POST') return { key: 'import', max: RATE_MAX_IMPORT };
   if (pathname.startsWith('/api/files/') && method === 'DELETE') return { key: 'delete', max: RATE_MAX_DELETE };
@@ -972,6 +1077,16 @@ async function handleApi(req, res, url) {
         rateMaxUpload: RATE_MAX_UPLOAD,
         rateMaxDelete: RATE_MAX_DELETE,
         rateMaxImport: RATE_MAX_IMPORT,
+        rateMaxAuthSession: RATE_MAX_AUTH_SESSION,
+        authFailWindowMs: AUTH_FAIL_WINDOW_MS,
+        authFailThreshold: AUTH_FAIL_THRESHOLD,
+        authLockoutMs: AUTH_LOCKOUT_MS,
+        authBackoffBaseMs: AUTH_BACKOFF_BASE_MS,
+        authBackoffMaxMs: AUTH_BACKOFF_MAX_MS,
+        authBackoffStartAfter: AUTH_BACKOFF_START_AFTER,
+        authGuardMaxEntries: AUTH_GUARD_MAX_ENTRIES,
+        ipAllowlistEnabled: IP_ALLOWLIST.length > 0,
+        trustProxy: TRUST_PROXY,
         sessionTtlMs: SESSION_TTL_MS,
         sessionAbsTtlMs: SESSION_ABS_TTL_MS,
         sessionBinding: SESSION_BINDING,
@@ -1260,7 +1375,8 @@ async function serveStatic(req, res, url) {
 
 const requestHandler = async (req, res) => {
   try {
-    if (!requireBasicAuth(req, res)) return;
+    if (!requireIpAllowlist(req, res)) return;
+    if (!(await requireBasicAuth(req, res))) return;
     const url = new URL(req.url, `http://${req.headers.host || `${HOST}:${PORT}`}`);
     if (url.pathname.startsWith('/api/')) {
       return await handleApi(req, res, url);
