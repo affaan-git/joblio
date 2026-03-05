@@ -106,6 +106,12 @@ If config is missing and startup is non-interactive, startup fails with guidance
 
 Anything in browser memory/UI is untrusted. High-value secrets remain server-side.
 
+### Network exposure risk
+
+- Do not bind Joblio to `0.0.0.0` or a public interface unless you explicitly need remote access and have network protections in place.
+- Default-safe posture is loopback-only (`127.0.0.1`) with remote binding disabled.
+- Exposing Joblio directly to public networks increases attack surface and is not recommended for v1.
+
 ## Interactive Setup (Detailed)
 
 Run:
@@ -161,6 +167,7 @@ Recommended production choices during setup:
 - Allow remote binding: `No` unless required
 - TLS mode: `require`
 - Strong password (12+ chars minimum; longer recommended)
+- Avoid `0.0.0.0` and public interface binding unless you are intentionally operating behind strict network controls.
 
 ## Docker Deployment
 
@@ -177,8 +184,8 @@ docker compose run --rm -it joblio npm run setup
 ```
 
 Important for Docker setup prompts:
-- Set host to `0.0.0.0`
-- Set allow remote binding to `Yes`
+- Keep host and remote-binding choices as restrictive as your deployment allows.
+- Prefer loopback-only host publishing from Docker (`127.0.0.1:8787:8787`) and avoid public exposure.
 - Use TLS settings appropriate for containerized cert paths if enabling HTTPS
 
 Start service:
