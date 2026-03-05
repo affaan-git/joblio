@@ -5,7 +5,7 @@ A local, single-user job application tracker.
 ![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js)
 ![JavaScript](https://img.shields.io/badge/JavaScript-ES6%2B-F7DF1E?logo=javascript)
 
-> NOTE: Joblio is NOT recommended to be exposed past local network. Use at own risk.
+> NOTE: Joblio is use at own risk (early development, security risks, etc.) and NOT recommended to be exposed past local network.
 
 ## What Joblio Does
 
@@ -23,7 +23,7 @@ A local, single-user job application tracker.
 - `Node.js 20+`
 - `OpenSSL (for TLS cert/key paths using npm run tls:gen)`
 
-## Installation
+### Installation
 
 Clone repository
 
@@ -59,14 +59,44 @@ npm start
 npm run validate:release
 ```
 
-### Usage and Reconfiguration
+## Usage
 
-After installation, running `npm start` will load the existing config and start Joblio, accessible from the web url printed to console.
+After initial installation
 
-Later reconfiguration if wanted:
+```sh
+npm start
+```
+
+Will load the existing config and start Joblio.
+
+> Web url for UI access will be printed to terminal.
+
+## Reconfiguration
 
 - Run `npm setup` to prompt for updating existing config
 - Run `npm run reconfigure` to open edit flow directly for existing config
+
+## Troubleshooting
+
+Setup needs interactive terminal:
+
+- If setup fails with TTY error, run `npm run setup` directly in an interactive terminal.
+
+Missing config at startup:
+
+- Run `npm run setup` first.
+
+TLS startup failure:
+
+- Verify cert/key files exist and paths are correct in setup.
+
+Session invalid behavior:
+
+- Use UI “Revoke all sessions” and sign in again.
+
+Smoke test skipped:
+
+- Some restricted environments do not allow local listen sockets.
 
 ## Docker support
 
@@ -77,7 +107,7 @@ Files:
 
 First-time container setup:
 
-```shell
+```sh
 cd tracker
 docker compose build
 docker compose run --rm -it joblio npm run setup
@@ -91,7 +121,7 @@ Important for Docker setup prompts:
 
 Start service:
 
-```shell
+```sh
 docker compose up -d
 ```
 
@@ -115,7 +145,7 @@ Single-process Node.js app. No external database required.
 If config is missing and startup is interactive, setup is launched automatically.
 If config is missing and startup is non-interactive, startup fails with guidance.
 
-## Security Model
+## Connection Model
 
 ### Authentication
 
@@ -157,13 +187,11 @@ If config is missing and startup is non-interactive, startup fails with guidance
 - Default-safe posture is loopback-only (`127.0.0.1`) with remote binding disabled.
 - Exposing Joblio directly to public networks increases attack surface and is not recommended.
 
-## Interactive Setup (Detailed)
+## References
 
-Run:
+### Interactive Setup
 
-```sh
-npm run setup
-```
+`npm run setup`
 
 Setup prompts for:
 
@@ -193,12 +221,12 @@ Updating existing config:
 - Running setup again prompts whether to update existing config
 - `npm run reconfigure` opens edit flow directly for existing config
 
-## Configuration Reference (`.joblio-data/config.env`)
+### Configuration Reference (`.joblio-data/config.env`)
 
 These keys are written by setup and used at runtime.
 
 | Key | Default | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `HOST` | `127.0.0.1` | Bind host |
 | `PORT` | `8787` | Bind port |
 | `JOBLIO_ALLOW_REMOTE` | `0` | Allow non-local bind |
@@ -216,15 +244,16 @@ These keys are written by setup and used at runtime.
 | `JOBLIO_ERROR_VERBOSE` | `0` | Internal error detail policy |
 
 Runtime override policy:
+
 - Joblio locks these config keys from runtime environment overrides in `npm start`.
 - Source of truth is the config file.
 
-## Runtime Limits and Tunables
+### Runtime Limits and Tunables
 
-These are server-supported keys (advanced operations). They are not currently prompted in setup.
+These are server-supported keys (advanced operations) that are not currently prompted in setup.
 
 | Key | Default | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `MAX_JSON_BODY_BYTES` | `5242880` | Max JSON body size |
 | `MAX_UPLOAD_JSON_BYTES` | `36700160` | Max upload payload size |
 | `MAX_FILE_BYTES` | `26214400` | Max decoded file upload size |
@@ -240,14 +269,16 @@ These are server-supported keys (advanced operations). They are not currently pr
 | `SESSION_TTL_MS` | `28800000` | Session idle timeout |
 | `SESSION_ABS_TTL_MS` | `86400000` | Session absolute timeout |
 
-## API Endpoints
+### API Endpoints
 
 Auth/session:
+
 - `POST /api/auth/session`
 - `POST /api/auth/logout`
 - `POST /api/auth/revoke-all`
 
 State/health:
+
 - `GET /api/state`
 - `PUT /api/state`
 - `GET /api/health`
@@ -255,6 +286,7 @@ State/health:
 - `GET /api/integrity/verify`
 
 Files:
+
 - `POST /api/files/upload`
 - `GET /api/files/:fileId/download`
 - `DELETE /api/files/:fileId`
@@ -262,13 +294,15 @@ Files:
 - `DELETE /api/files/:fileId/purge`
 
 Data/template:
+
 - `GET /api/export`
 - `POST /api/import`
 - `GET /api/template/resume`
 
-## Data Layout
+### Data Layout
 
 Under `.joblio-data/`:
+
 - `config.env`
 - `state.json`
 - `storage/`
@@ -279,53 +313,25 @@ Under `.joblio-data/`:
 - `logs/audit-chain.json`
 - `sessions.enc`
 
-## Commands
+### Commands
 
 Core:
 
-```bash
-npm run setup
-npm run reconfigure
-npm start
-```
+- `npm run setup`
+- `npm run reconfigure`
+- `npm start`
 
 Validation/ops:
 
-```bash
-npm run preflight
-npm run test:security
-npm run smoke
-npm run validate:release
-npm run backup
-npm run restore -- --file <backup-file> --yes
-npm run tls:gen
-```
+- `npm run preflight`
+- `npm run test:security`
+- `npm run smoke`
+- `npm run validate:release`
+- `npm run backup`
+- `npm run restore -- --file <backup-file> --yes`
+- `npm run tls:gen`
 
-## Troubleshooting
-
-Setup needs interactive terminal:
-- If setup fails with TTY error, run `npm run setup` directly in an interactive terminal.
-
-Missing config at startup:
-- Run `npm run setup` first.
-
-TLS startup failure:
-- Verify cert/key files exist and paths are correct in setup.
-
-Session invalid behavior:
-- Use UI “Revoke all sessions” and sign in again.
-
-Smoke test skipped:
-- Some restricted environments do not allow local listen sockets.
-
-## Scope and Non-Goals (v1)
-
-- Single-user, local/self-hosted design
-- No multi-tenant isolation model
-- No external identity provider integration
-- No cloud-managed deployment stack included
-
-## Script Index
+### Script Index
 
 - `scripts/setup.js` - interactive configuration
 - `scripts/start.js` - unified startup path
@@ -336,3 +342,10 @@ Smoke test skipped:
 - `scripts/backup.js` - data backup
 - `scripts/restore.js` - data restore
 - `scripts/validate-release.js` - release gate runner
+
+## Scope and Non-Goals (for now)
+
+- Single-user, local/self-hosted
+- No multi-tenant isolation model
+- No external identity provider integration
+- No cloud-managed deployment stack included
