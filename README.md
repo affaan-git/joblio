@@ -7,7 +7,7 @@ A local, single-user job application tracker.
 
 > WARNING: Joblio is local-first software.
 > Do not expose it directly to the internet or public interfaces.
-> Internet/public deployment is outside supported security scope.
+> Internet/public deployment is outside supported security scope for v1.
 
 ## What Joblio Does
 
@@ -29,7 +29,7 @@ Issues during setup? Jump to [Troubleshooting](#troubleshooting).
 
 ### Installation
 
-#### Security First
+### Security First
 
 - Supported deployment: local machine or private local network access only.
 - Unsupported deployment: direct public internet exposure.
@@ -59,7 +59,6 @@ npm run setup
 Recommended choices during setup:
 
 - Host is fixed to `127.0.0.1` for local-only safety
-- TLS is HTTPS-only (`require`) and cannot be disabled
 - Strong password (12+ chars minimum; longer recommended)
 - Avoid changing host binding to public interfaces.
 
@@ -142,12 +141,12 @@ Single-process Node.js app. No external database required.
 
 ### Authentication
 
-- Global Basic Auth (strict mode)
+- Global Basic Auth (required)
 - API session cookie (`joblio_sid`) required for `/api/*`
 - Session cookie attributes:
   - `HttpOnly`
   - `SameSite=Strict`
-  - `Secure` when TLS/cookie-secure enabled
+  - `Secure` (always enabled)
 
 ### CSRF
 
@@ -228,7 +227,6 @@ These keys are written by setup and used at runtime.
 | --- | --- | --- |
 | `HOST` | `127.0.0.1` | Bind host |
 | `PORT` | `8787` | Bind port |
-| `JOBLIO_STRICT_MODE` | `1` | Enforce strict auth |
 | `JOBLIO_API_TOKEN` | random | Session signing/encryption secret |
 | `JOBLIO_BASIC_AUTH_USER` | `joblio` | Basic Auth username |
 | `JOBLIO_BASIC_AUTH_HASH` | generated | `scrypt$...` password hash |

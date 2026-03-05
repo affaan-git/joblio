@@ -7,7 +7,6 @@ const { parseAllowlist } = require('../lib/ip-allowlist');
 
 const root = path.resolve(__dirname, '..');
 const host = process.env.HOST || '127.0.0.1';
-const strictMode = process.env.JOBLIO_STRICT_MODE !== '0';
 const token = process.env.JOBLIO_API_TOKEN || '';
 const basicUser = process.env.JOBLIO_BASIC_AUTH_USER || '';
 const basicHash = process.env.JOBLIO_BASIC_AUTH_HASH || '';
@@ -34,11 +33,11 @@ if (!localhostHosts.has(String(host).trim().toLowerCase())) {
   issues.push(`HOST=${host} is not local. Use HOST=127.0.0.1.`);
 }
 
-if (strictMode && !token) {
-  issues.push('JOBLIO_API_TOKEN is required when strict mode is enabled (default).');
+if (!token) {
+  issues.push('JOBLIO_API_TOKEN is required.');
 }
-if (strictMode && (!basicUser || !basicHash)) {
-  issues.push('JOBLIO_BASIC_AUTH_USER and JOBLIO_BASIC_AUTH_HASH are required when strict mode is enabled (default).');
+if (!basicUser || !basicHash) {
+  issues.push('JOBLIO_BASIC_AUTH_USER and JOBLIO_BASIC_AUTH_HASH are required.');
 }
 
 if (!tlsCert || !tlsKey) {

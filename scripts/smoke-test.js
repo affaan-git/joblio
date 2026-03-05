@@ -87,7 +87,6 @@ async function waitForServer(timeoutMs = 8000) {
     PORT: String(port),
     JOBLIO_TLS_CERT_PATH: tls.certPath,
     JOBLIO_TLS_KEY_PATH: tls.keyPath,
-    JOBLIO_STRICT_MODE: '1',
     JOBLIO_API_TOKEN: token,
     JOBLIO_BASIC_AUTH_USER: basicUser,
     JOBLIO_BASIC_AUTH_HASH: createPasswordHash(basicPass),
