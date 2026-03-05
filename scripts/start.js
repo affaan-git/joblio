@@ -7,8 +7,8 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 
 const root = path.resolve(__dirname, '..');
-const dataDir = path.join(root, '.joblio-data');
-const configPath = path.join(dataDir, 'config.env');
+const configDir = path.join(root, '.joblio-data');
+const configPath = path.join(configDir, 'config.env');
 
 function parseEnvText(text) {
   const out = {};
@@ -63,20 +63,21 @@ function buildLockedRuntimeEnv(configEnv) {
 }
 
 async function main() {
-  await fsp.mkdir(dataDir, { recursive: true });
+  await fsp.mkdir(configDir, { recursive: true });
   const setupOk = await ensureSetup();
   if (!setupOk) process.exit(1);
 
   const configEnv = await loadConfigEnv();
+  const runtimeDataDir = path.resolve(configEnv.JOBLIO_DATA_DIR || path.join(root, '.joblio-data'));
+  await fsp.mkdir(runtimeDataDir, { recursive: true });
   const env = buildLockedRuntimeEnv(configEnv);
 
   const preflight = await runWithEnv(process.execPath, ['./scripts/preflight.js'], env);
   if (preflight.code !== 0) process.exit(preflight.code || 1);
 
-  const protocol = String(configEnv.JOBLIO_TLS_MODE || '').toLowerCase() === 'off' ? 'http' : 'https';
   const host = configEnv.HOST || '127.0.0.1';
   const port = configEnv.PORT || '8787';
-  console.log(`Starting Joblio on ${protocol}://${host}:${port}`);
+  console.log(`Starting Joblio on https://${host}:${port}`);
   console.log('Use your configured Basic Auth credentials to sign in.');
 
   const server = spawn(process.execPath, ['server.js'], { cwd: root, env, stdio: 'inherit' });

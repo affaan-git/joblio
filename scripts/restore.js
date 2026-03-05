@@ -6,6 +6,31 @@ const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 
 const root = path.resolve(__dirname, '..');
+const configPath = path.join(root, '.joblio-data', 'config.env');
+
+function parseEnvText(text) {
+  const out = {};
+  const lines = String(text || '').split(/\r?\n/);
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t || t.startsWith('#')) continue;
+    const idx = t.indexOf('=');
+    if (idx < 1) continue;
+    const key = t.slice(0, idx).trim();
+    const value = t.slice(idx + 1).trim();
+    if (!key) continue;
+    out[key] = value;
+  }
+  return out;
+}
+
+function loadConfigEnv() {
+  try {
+    return parseEnvText(fs.readFileSync(configPath, 'utf8'));
+  } catch {
+    return {};
+  }
+}
 
 function runOrThrow(cmd, args) {
   const result = spawnSync(cmd, args, { cwd: root, stdio: 'inherit' });
@@ -37,11 +62,14 @@ function usage() {
   }
 
   if (backupPath.endsWith('.zip')) {
+    const config = loadConfigEnv();
+    const dataDir = path.resolve(config.JOBLIO_DATA_DIR || path.join(root, '.joblio-data'));
+    const extractDir = path.dirname(dataDir);
     runOrThrow('powershell.exe', [
       '-NoProfile',
       '-NonInteractive',
       '-Command',
-      `Expand-Archive -Path '${backupPath.replace(/'/g, "''")}' -DestinationPath '${root.replace(/'/g, "''")}' -Force`,
+      `Expand-Archive -Path '${backupPath.replace(/'/g, "''")}' -DestinationPath '${extractDir.replace(/'/g, "''")}' -Force`,
     ]);
     // eslint-disable-next-line no-console
     console.log('Restore complete from zip backup.');
@@ -49,7 +77,10 @@ function usage() {
   }
 
   if (backupPath.endsWith('.tar.gz') || backupPath.endsWith('.tgz')) {
-    runOrThrow('tar', ['-xzf', backupPath, '-C', root]);
+    const config = loadConfigEnv();
+    const dataDir = path.resolve(config.JOBLIO_DATA_DIR || path.join(root, '.joblio-data'));
+    const extractDir = path.dirname(dataDir);
+    runOrThrow('tar', ['-xzf', backupPath, '-C', extractDir]);
     // eslint-disable-next-line no-console
     console.log('Restore complete from tar backup.');
     return;

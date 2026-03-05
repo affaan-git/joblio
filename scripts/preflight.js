@@ -11,7 +11,6 @@ const strictMode = process.env.JOBLIO_STRICT_MODE !== '0';
 const token = process.env.JOBLIO_API_TOKEN || '';
 const basicUser = process.env.JOBLIO_BASIC_AUTH_USER || '';
 const basicHash = process.env.JOBLIO_BASIC_AUTH_HASH || '';
-const tlsMode = process.env.JOBLIO_TLS_MODE || 'off';
 const tlsCert = process.env.JOBLIO_TLS_CERT_PATH || '';
 const tlsKey = process.env.JOBLIO_TLS_KEY_PATH || '';
 const rateMaxAuthSession = Number(process.env.RATE_MAX_AUTH_SESSION || 45);
@@ -24,7 +23,7 @@ const authBackoffStartAfter = Number(process.env.AUTH_BACKOFF_START_AFTER || 2);
 const authGuardMaxEntries = Number(process.env.AUTH_GUARD_MAX_ENTRIES || 20000);
 const ipAllowlistRaw = process.env.JOBLIO_IP_ALLOWLIST || '';
 const trustProxy = process.env.JOBLIO_TRUST_PROXY === '1';
-const dataDir = path.join(root, '.joblio-data');
+const dataDir = path.resolve(process.env.JOBLIO_DATA_DIR || path.join(root, '.joblio-data'));
 const templatePath = path.join(root, 'templates', 'resume-template.md');
 
 const issues = [];
@@ -42,11 +41,8 @@ if (strictMode && (!basicUser || !basicHash)) {
   issues.push('JOBLIO_BASIC_AUTH_USER and JOBLIO_BASIC_AUTH_HASH are required when strict mode is enabled (default).');
 }
 
-if (!new Set(['off', 'on', 'require']).has(tlsMode)) {
-  issues.push('JOBLIO_TLS_MODE must be one of: off, on, require.');
-}
-if ((tlsMode === 'on' || tlsMode === 'require') && (!tlsCert || !tlsKey)) {
-  issues.push('TLS mode requires JOBLIO_TLS_CERT_PATH and JOBLIO_TLS_KEY_PATH.');
+if (!tlsCert || !tlsKey) {
+  issues.push('HTTPS requires JOBLIO_TLS_CERT_PATH and JOBLIO_TLS_KEY_PATH.');
 }
 if (tlsCert && !fs.existsSync(path.resolve(tlsCert))) {
   issues.push(`TLS cert not found: ${tlsCert}`);

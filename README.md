@@ -5,7 +5,7 @@ A local, single-user job application tracker.
 ![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js)
 ![JavaScript](https://img.shields.io/badge/JavaScript-ES6%2B-F7DF1E?logo=javascript)
 
-> NOTE: Joblio is early-stage software and is used at your own risk. Do not expose it beyond your local/private network.
+> NOTE: Joblio is early-stage software and is used at your own risk. Do NOT expose it beyond your local/private network.
 
 ## What Joblio Does
 
@@ -23,7 +23,7 @@ Issues during setup? Jump to [Troubleshooting](#troubleshooting).
 ### Prerequisites
 
 - [`Node.js 20+`](https://nodejs.org/) ([download](https://nodejs.org/en/download))
-- [`OpenSSL`](https://www.openssl.org/) (only if you want to generate local TLS certs with `npm run tls:gen`)
+- [`OpenSSL`](https://www.openssl.org/) (required for `npm run tls:gen` and smoke test TLS generation)
 
 ### Installation
 
@@ -49,9 +49,10 @@ npm run setup
 Recommended choices during setup:
 
 - Host is fixed to `127.0.0.1` for local-only safety
-- TLS mode: `require`
+- TLS is HTTPS-only (`require`) and cannot be disabled
 - Strong password (12+ chars minimum; longer recommended)
 - Avoid changing host binding to public interfaces.
+- If running behind proxy, configure and verify `JOBLIO_IP_ALLOWLIST` and only then enable `JOBLIO_TRUST_PROXY`.
 
 Start Joblio
 
@@ -113,7 +114,10 @@ Start service:
 docker compose up -d
 ```
 
-Persistent data is mounted at `./docker-data` -> `/app/.joblio-data`
+Persistent defaults:
+
+- `${JOBLIO_DATA_HOST_PATH:-./docker-data}` -> `${JOBLIO_DATA_DIR:-/app/.joblio-data}`
+- `${JOBLIO_BACKUP_HOST_PATH:-./docker-backups}` -> `${JOBLIO_BACKUP_DIR:-/app/backups}`
 
 ## Architecture
 
@@ -178,7 +182,8 @@ Setup prompts for:
 - Basic Auth username
 - Basic Auth password (hidden; confirmation required)
 - Port
-- TLS mode (`off`, `on`, `require`)
+- Storage data directory
+- Backup directory
 - TLS cert path
 - TLS key path
 - Auth session rate limit
@@ -218,10 +223,11 @@ These keys are written by setup and used at runtime.
 | `JOBLIO_BASIC_AUTH_USER` | `joblio` | Basic Auth username |
 | `JOBLIO_BASIC_AUTH_HASH` | generated | `scrypt$...` password hash |
 | `JOBLIO_AUDIT_KEY` | random | Audit-chain HMAC key |
-| `JOBLIO_TLS_MODE` | `off` (or selected) | `off`, `on`, `require` |
 | `JOBLIO_TLS_CERT_PATH` | `.joblio-data/tls/localhost-cert.pem` | TLS cert path |
 | `JOBLIO_TLS_KEY_PATH` | `.joblio-data/tls/localhost-key.pem` | TLS key path |
-| `JOBLIO_COOKIE_SECURE` | `0` when TLS off, else `1` | Force `Secure` cookie attribute |
+| `JOBLIO_DATA_DIR` | `.joblio-data` | Runtime state/log/storage root |
+| `JOBLIO_BACKUP_DIR` | `backups` | Backup output directory |
+| `JOBLIO_COOKIE_SECURE` | `1` | Force `Secure` cookie attribute |
 | `JOBLIO_SESSION_BINDING` | `strict` | Session binding policy |
 | `JOBLIO_HEALTH_VERBOSE` | `0` | Verbose health policy |
 | `JOBLIO_ERROR_VERBOSE` | `0` | Internal error detail policy |
@@ -374,23 +380,3 @@ Session invalid behavior:
 Smoke test skipped:
 
 - Some restricted environments do not allow local listen sockets.
-
-## Incident Runbook
-
-Credential attack suspected:
-
-1. Revoke all sessions from UI.
-2. Run `npm run reconfigure` and rotate password.
-3. Keep localhost-only binding (`127.0.0.1`).
-4. Tighten auth controls in setup:
-   - Lower `AUTH_FAIL_THRESHOLD`
-   - Increase `AUTH_LOCKOUT_MS`
-   - Reduce `RATE_MAX_AUTH_SESSION`
-5. If running behind proxy, configure and verify `JOBLIO_IP_ALLOWLIST` and only then enable `JOBLIO_TRUST_PROXY`.
-6. Run `npm run validate:release`.
-
-Suspected unauthorized source IP:
-
-1. Add/adjust `JOBLIO_IP_ALLOWLIST` in reconfigure flow.
-2. Keep Docker publish loopback-only.
-3. Restart with `npm start`.

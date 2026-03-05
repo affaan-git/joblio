@@ -12,8 +12,6 @@ const { createPasswordHash } = require('../lib/auth');
 const root = path.resolve(__dirname, '..');
 const dataDir = path.join(root, '.joblio-data');
 const configPath = path.join(dataDir, 'config.env');
-const tlsDirCert = path.join(dataDir, 'tls', 'localhost-cert.pem');
-const tlsDirKey = path.join(dataDir, 'tls', 'localhost-key.pem');
 
 function randHex(bytes) {
   return crypto.randomBytes(bytes).toString('hex');
@@ -35,10 +33,6 @@ function parseIntInRange(v, fallback, min, max) {
   if (!Number.isFinite(n) || !Number.isInteger(n)) return fallback;
   if (n < min || n > max) return fallback;
   return n;
-}
-
-function isValidTlsMode(v) {
-  return new Set(['off', 'on', 'require']).has(v);
 }
 
 function parseEnvText(text) {
@@ -150,29 +144,31 @@ async function askInteractive(existing, options = {}) {
     const portRaw = await rl.question(`Port [${defaultPort}]: `);
     const port = parsePort(portRaw, defaultPort);
 
-    const hasLocalTls = fs.existsSync(tlsDirCert) && fs.existsSync(tlsDirKey);
-    const defaultTlsMode = sanitizeValue(existing.JOBLIO_TLS_MODE || (hasLocalTls ? 'require' : 'off')).toLowerCase();
-    const tlsModeRaw = await rl.question(`TLS mode [${defaultTlsMode}] (off/on/require): `);
-    const tlsMode = sanitizeValue(tlsModeRaw || defaultTlsMode).toLowerCase();
-    if (!isValidTlsMode(tlsMode)) throw new Error('TLS mode must be off, on, or require.');
+    const defaultDataDir = sanitizeValue(existing.JOBLIO_DATA_DIR || path.join(root, '.joblio-data'));
+    const dataDirRaw = await rl.question(`Storage data directory [${defaultDataDir}]: `);
+    const runtimeDataDir = sanitizeValue(dataDirRaw || defaultDataDir);
+    if (!runtimeDataDir) throw new Error('Storage data directory is required.');
 
-    const defaultTlsCertPath = sanitizeValue(existing.JOBLIO_TLS_CERT_PATH || tlsDirCert);
-    const defaultTlsKeyPath = sanitizeValue(existing.JOBLIO_TLS_KEY_PATH || tlsDirKey);
+    const defaultBackupDir = sanitizeValue(existing.JOBLIO_BACKUP_DIR || path.join(root, 'backups'));
+    const backupDirRaw = await rl.question(`Backup directory [${defaultBackupDir}]: `);
+    const backupDir = sanitizeValue(backupDirRaw || defaultBackupDir);
+    if (!backupDir) throw new Error('Backup directory is required.');
+
+    const defaultTlsCertPath = sanitizeValue(existing.JOBLIO_TLS_CERT_PATH || path.join(runtimeDataDir, 'tls', 'localhost-cert.pem'));
+    const defaultTlsKeyPath = sanitizeValue(existing.JOBLIO_TLS_KEY_PATH || path.join(runtimeDataDir, 'tls', 'localhost-key.pem'));
     const certPathRaw = await rl.question(`TLS cert path [${defaultTlsCertPath}]: `);
     const keyPathRaw = await rl.question(`TLS key path [${defaultTlsKeyPath}]: `);
     const certPath = sanitizeValue(certPathRaw || defaultTlsCertPath);
     const keyPath = sanitizeValue(keyPathRaw || defaultTlsKeyPath);
 
-    if (tlsMode !== 'off') {
-      if (!certPath || !keyPath) {
-        throw new Error('TLS mode on/require needs both cert and key paths.');
-      }
-      if (!fs.existsSync(path.resolve(certPath))) {
-        throw new Error(`TLS cert not found: ${certPath}`);
-      }
-      if (!fs.existsSync(path.resolve(keyPath))) {
-        throw new Error(`TLS key not found: ${keyPath}`);
-      }
+    if (!certPath || !keyPath) {
+      throw new Error('TLS cert and key paths are required.');
+    }
+    if (!fs.existsSync(path.resolve(certPath))) {
+      throw new Error(`TLS cert not found: ${certPath}`);
+    }
+    if (!fs.existsSync(path.resolve(keyPath))) {
+      throw new Error(`TLS key not found: ${keyPath}`);
     }
 
     const defaultRateAuthSession = parseIntInRange(existing.RATE_MAX_AUTH_SESSION, 45, 1, 100000);
@@ -225,7 +221,8 @@ async function askInteractive(existing, options = {}) {
       port,
       user,
       passwordHash,
-      tlsMode,
+      runtimeDataDir,
+      backupDir,
       certPath,
       keyPath,
       rateMaxAuthSession,
@@ -258,10 +255,11 @@ async function writeConfig(result) {
     `JOBLIO_BASIC_AUTH_USER=${sanitizeValue(result.user)}`,
     `JOBLIO_BASIC_AUTH_HASH=${sanitizeValue(result.passwordHash)}`,
     `JOBLIO_AUDIT_KEY=${sanitizeValue(result.auditKey)}`,
-    `JOBLIO_TLS_MODE=${sanitizeValue(result.tlsMode)}`,
     `JOBLIO_TLS_CERT_PATH=${sanitizeValue(result.certPath)}`,
     `JOBLIO_TLS_KEY_PATH=${sanitizeValue(result.keyPath)}`,
-    `JOBLIO_COOKIE_SECURE=${result.tlsMode === 'off' ? '0' : '1'}`,
+    `JOBLIO_DATA_DIR=${sanitizeValue(result.runtimeDataDir)}`,
+    `JOBLIO_BACKUP_DIR=${sanitizeValue(result.backupDir)}`,
+    'JOBLIO_COOKIE_SECURE=1',
     'JOBLIO_SESSION_BINDING=strict',
     'JOBLIO_HEALTH_VERBOSE=0',
     'JOBLIO_ERROR_VERBOSE=0',

@@ -7,7 +7,8 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const root = path.resolve(__dirname, '..');
-const outDir = path.join(root, '.joblio-data', 'tls');
+const dataDir = path.resolve(process.env.JOBLIO_DATA_DIR || path.join(root, '.joblio-data'));
+const outDir = path.join(dataDir, 'tls');
 const certPath = path.join(outDir, 'localhost-cert.pem');
 const keyPath = path.join(outDir, 'localhost-key.pem');
 
@@ -41,5 +42,5 @@ const keyPath = path.join(outDir, 'localhost-key.pem');
   // eslint-disable-next-line no-console
   console.log(`Generated key:  ${keyPath}`);
   // eslint-disable-next-line no-console
-  console.log('Then run interactive setup and select TLS mode=require with those cert/key paths.');
+  console.log('Then run interactive setup and use those cert/key paths.');
 })();

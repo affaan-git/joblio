@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 'use strict';
 
-const http = require('node:http');
 const https = require('node:https');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
@@ -13,11 +12,10 @@ const { normalizeIp, parseAllowlist, isIpAllowed } = require('./lib/ip-allowlist
 
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 8787);
-const TLS_MODE = process.env.JOBLIO_TLS_MODE || 'off'; // off | on | require
 const TLS_CERT_PATH = process.env.JOBLIO_TLS_CERT_PATH || '';
 const TLS_KEY_PATH = process.env.JOBLIO_TLS_KEY_PATH || '';
 const ROOT_DIR = __dirname;
-const DATA_DIR = path.join(ROOT_DIR, '.joblio-data');
+const DATA_DIR = path.resolve(process.env.JOBLIO_DATA_DIR || path.join(ROOT_DIR, '.joblio-data'));
 const TEMPLATE_DIR = path.join(ROOT_DIR, 'templates');
 const STORAGE_DIR = path.join(DATA_DIR, 'storage');
 const TRASH_STORAGE_DIR = path.join(DATA_DIR, 'storage-trash');
@@ -179,9 +177,6 @@ function validateStartupConfig() {
   if (!new Set(['strict', 'ip', 'ua', 'off']).has(SESSION_BINDING)) {
     throw new Error('JOBLIO_SESSION_BINDING must be one of: strict, ip, ua, off');
   }
-  if (!new Set(['off', 'on', 'require']).has(TLS_MODE)) {
-    throw new Error('JOBLIO_TLS_MODE must be one of: off, on, require');
-  }
   if (RATE_MAX_AUTH_SESSION <= 0) {
     throw new Error('RATE_MAX_AUTH_SESSION must be > 0');
   }
@@ -197,13 +192,8 @@ function validateStartupConfig() {
   if (AUTH_GUARD_MAX_ENTRIES <= 0) {
     throw new Error('AUTH_GUARD_MAX_ENTRIES must be > 0');
   }
-  if ((TLS_MODE === 'on' || TLS_MODE === 'require') && (!TLS_CERT_PATH || !TLS_KEY_PATH)) {
+  if (!TLS_CERT_PATH || !TLS_KEY_PATH) {
     throw new Error('TLS enabled but JOBLIO_TLS_CERT_PATH or JOBLIO_TLS_KEY_PATH is missing.');
-  }
-  if ((TLS_MODE === 'on' || TLS_MODE === 'require') && (TLS_CERT_PATH || TLS_KEY_PATH)) {
-    if (!TLS_CERT_PATH || !TLS_KEY_PATH) {
-      throw new Error('TLS cert and key must both be provided.');
-    }
   }
 }
 
@@ -1376,7 +1366,7 @@ const requestHandler = async (req, res) => {
   try {
     if (!requireIpAllowlist(req, res)) return;
     if (!(await requireBasicAuth(req, res))) return;
-    const url = new URL(req.url, `http://${req.headers.host || `${HOST}:${PORT}`}`);
+    const url = new URL(req.url, `https://${req.headers.host || `${HOST}:${PORT}`}`);
     if (url.pathname.startsWith('/api/')) {
       return await handleApi(req, res, url);
     }
@@ -1390,18 +1380,10 @@ const requestHandler = async (req, res) => {
 };
 
 function createServerWithTransport() {
-  const tlsRequested = (TLS_MODE === 'on' || TLS_MODE === 'require') && TLS_CERT_PATH && TLS_KEY_PATH;
-  if (tlsRequested) {
-    const cert = fs.readFileSync(path.resolve(TLS_CERT_PATH));
-    const key = fs.readFileSync(path.resolve(TLS_KEY_PATH));
-    transportIsTls = true;
-    return https.createServer({ cert, key }, requestHandler);
-  }
-  if (TLS_MODE === 'require') {
-    throw new Error('JOBLIO_TLS_MODE=require but TLS cert/key are unavailable.');
-  }
-  transportIsTls = false;
-  return http.createServer(requestHandler);
+  const cert = fs.readFileSync(path.resolve(TLS_CERT_PATH));
+  const key = fs.readFileSync(path.resolve(TLS_KEY_PATH));
+  transportIsTls = true;
+  return https.createServer({ cert, key }, requestHandler);
 }
 
 const server = createServerWithTransport();

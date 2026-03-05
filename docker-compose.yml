@@ -5,5 +5,9 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:8787:8787"
+    environment:
+      - JOBLIO_DATA_DIR=${JOBLIO_DATA_DIR:-/app/.joblio-data}
+      - JOBLIO_BACKUP_DIR=${JOBLIO_BACKUP_DIR:-/app/backups}
     volumes:
-      - ./docker-data:/app/.joblio-data
+      - ${JOBLIO_DATA_HOST_PATH:-./docker-data}:${JOBLIO_DATA_DIR:-/app/.joblio-data}
+      - ${JOBLIO_BACKUP_HOST_PATH:-./docker-backups}:${JOBLIO_BACKUP_DIR:-/app/backups}

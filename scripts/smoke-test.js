@@ -2,13 +2,16 @@
 'use strict';
 
 const { spawn } = require('node:child_process');
+const { spawnSync } = require('node:child_process');
+const fs = require('node:fs');
+const fsp = require('node:fs/promises');
 const path = require('node:path');
 const { createPasswordHash } = require('../lib/auth');
 
 const root = path.resolve(__dirname, '..');
 const port = Number(process.env.SMOKE_PORT || 8799);
 const host = '127.0.0.1';
-const base = `http://${host}:${port}`;
+const base = `https://${host}:${port}`;
 const token = process.env.SMOKE_TOKEN || 'smoke-token-123';
 const basicUser = process.env.SMOKE_BASIC_USER || 'smoke-user';
 const basicPass = process.env.SMOKE_BASIC_PASS || 'smoke-pass';
@@ -17,6 +20,33 @@ let cookieJar = '';
 let csrfToken = '';
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+async function ensureTlsPair() {
+  const tlsDir = path.join(root, '.joblio-data', 'tls');
+  const certPath = path.join(tlsDir, 'smoke-localhost-cert.pem');
+  const keyPath = path.join(tlsDir, 'smoke-localhost-key.pem');
+  await fsp.mkdir(tlsDir, { recursive: true });
+  if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
+    return { certPath, keyPath };
+  }
+  const openssl = spawnSync('openssl', ['version'], { stdio: 'ignore' });
+  if (openssl.status !== 0) {
+    throw new Error('OpenSSL not found for smoke TLS setup');
+  }
+  const args = [
+    'req', '-x509', '-nodes', '-newkey', 'rsa:2048',
+    '-keyout', keyPath,
+    '-out', certPath,
+    '-days', '1',
+    '-subj', '/CN=localhost',
+    '-addext', 'subjectAltName=DNS:localhost,IP:127.0.0.1',
+  ];
+  const run = spawnSync('openssl', args, { cwd: root, stdio: 'ignore' });
+  if (run.status !== 0) {
+    throw new Error('Failed generating smoke TLS cert/key');
+  }
+  return { certPath, keyPath };
+}
 
 async function req(url, opts = {}) {
   const headers = {
@@ -49,10 +79,14 @@ async function waitForServer(timeoutMs = 8000) {
 }
 
 (async () => {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  const tls = await ensureTlsPair();
   const env = {
     ...process.env,
     HOST: host,
     PORT: String(port),
+    JOBLIO_TLS_CERT_PATH: tls.certPath,
+    JOBLIO_TLS_KEY_PATH: tls.keyPath,
     JOBLIO_STRICT_MODE: '1',
     JOBLIO_API_TOKEN: token,
     JOBLIO_BASIC_AUTH_USER: basicUser,
