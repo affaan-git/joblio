@@ -8,7 +8,6 @@ const { parseAllowlist } = require('../lib/ip-allowlist');
 const root = path.resolve(__dirname, '..');
 const host = process.env.HOST || '127.0.0.1';
 const strictMode = process.env.JOBLIO_STRICT_MODE !== '0';
-const allowRemote = process.env.JOBLIO_ALLOW_REMOTE === '1';
 const token = process.env.JOBLIO_API_TOKEN || '';
 const basicUser = process.env.JOBLIO_BASIC_AUTH_USER || '';
 const basicHash = process.env.JOBLIO_BASIC_AUTH_HASH || '';
@@ -32,8 +31,8 @@ const issues = [];
 const warns = [];
 
 const localhostHosts = new Set(['127.0.0.1', 'localhost', '::1']);
-if (!allowRemote && !localhostHosts.has(String(host).trim().toLowerCase())) {
-  issues.push(`HOST=${host} is not local. Use HOST=127.0.0.1 or JOBLIO_ALLOW_REMOTE=1.`);
+if (!localhostHosts.has(String(host).trim().toLowerCase())) {
+  issues.push(`HOST=${host} is not local. Use HOST=127.0.0.1.`);
 }
 
 if (strictMode && !token) {

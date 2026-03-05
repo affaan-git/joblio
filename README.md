@@ -48,11 +48,10 @@ npm run setup
 
 Recommended choices during setup:
 
-- Host: `127.0.0.1` (or explicit private interface if required)
-- Allow remote binding: `No` unless required
+- Host is fixed to `127.0.0.1` for local-only safety
 - TLS mode: `require`
 - Strong password (12+ chars minimum; longer recommended)
-- Avoid `0.0.0.0` and public interface binding unless you are intentionally operating behind strict network controls.
+- Avoid changing host binding to public interfaces.
 
 Start Joblio
 
@@ -104,7 +103,7 @@ docker compose run --rm -it joblio npm run setup
 
 Important for Docker setup prompts:
 
-- Keep host and remote-binding choices as restrictive as your deployment allows.
+- Host is locked to localhost-only binding.
 - Prefer loopback-only host publishing from Docker (default: `127.0.0.1:8787:8787`) and avoid public exposure.
 - Use TLS settings appropriate for containerized cert paths if enabling HTTPS
 
@@ -165,9 +164,8 @@ Single-process Node.js app. No external database required.
 
 ### Network exposure risk
 
-- Do not bind Joblio to `0.0.0.0` or a public interface unless you explicitly need remote access and have network protections in place.
-- Default-safe posture is loopback-only (`127.0.0.1`) with remote binding disabled.
-- Exposing Joblio directly to public networks increases attack surface and is not recommended.
+- Joblio is local-only and binds to loopback (`127.0.0.1`).
+- Exposing Joblio directly to public networks is unsupported and not recommended.
 
 ## Technical Reference
 
@@ -179,9 +177,7 @@ Setup prompts for:
 
 - Basic Auth username
 - Basic Auth password (hidden; confirmation required)
-- Host
 - Port
-- Allow remote binding (yes/no)
 - TLS mode (`off`, `on`, `require`)
 - TLS cert path
 - TLS key path
@@ -217,7 +213,6 @@ These keys are written by setup and used at runtime.
 | --- | --- | --- |
 | `HOST` | `127.0.0.1` | Bind host |
 | `PORT` | `8787` | Bind port |
-| `JOBLIO_ALLOW_REMOTE` | `0` | Allow non-local bind |
 | `JOBLIO_STRICT_MODE` | `1` | Enforce strict auth |
 | `JOBLIO_API_TOKEN` | random | Session signing/encryption secret |
 | `JOBLIO_BASIC_AUTH_USER` | `joblio` | Basic Auth username |
@@ -386,7 +381,7 @@ Credential attack suspected:
 
 1. Revoke all sessions from UI.
 2. Run `npm run reconfigure` and rotate password.
-3. Keep strict host/binding choices (`127.0.0.1`, remote binding off) unless operationally required.
+3. Keep localhost-only binding (`127.0.0.1`).
 4. Tighten auth controls in setup:
    - Lower `AUTH_FAIL_THRESHOLD`
    - Increase `AUTH_LOCKOUT_MS`
