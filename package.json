@@ -5,11 +5,12 @@
   "description": "Joblio local tracker backend + UI",
   "scripts": {
     "preflight": "node ./scripts/preflight.js",
+    "security:check": "node ./scripts/security-check.js",
     "setup": "node ./scripts/setup.js",
     "reconfigure": "node ./scripts/setup.js --reconfigure",
     "start": "node ./scripts/start.js",
     "tls:gen": "node ./scripts/gen-local-tls.js",
-    "test:security": "node --test ./scripts/security-tests.js",
+    "test:security": "node --test ./scripts/security-tests.js ./scripts/restore-tests.js",
     "validate:release": "node ./scripts/validate-release.js",
     "smoke": "node ./scripts/smoke-test.js",
     "backup": "node ./scripts/backup.js",

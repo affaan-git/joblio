@@ -1528,7 +1528,7 @@
         statusHistory: [{ status: "wishlist", at: t }],
         statusUpdatedAt: t,
         appliedAt: "",
-        appliedTime: hhmmFromIsoInTimeZone(serverNowIso, serverTimeZone) || nowTimeStr(),
+        appliedTime: "",
         jobUrl: "",
         applicationUrl: "",
         note: "",
@@ -2262,8 +2262,13 @@
       const t = nowIso();
       normalizeStatusHistory(app);
       app.status = next;
-      if (next === "applied" && !options.preserveAppliedDate) {
-        app.appliedAt = todayDateStr();
+      if (next === "applied") {
+        if (!options.preserveAppliedDate && !app.appliedAt) {
+          app.appliedAt = todayDateStr();
+        }
+        if (!app.appliedTime) {
+          app.appliedTime = hhmmFromIsoInTimeZone(t, serverTimeZone) || nowTimeStr();
+        }
       }
       app.statusUpdatedAt = t;
       app.updatedAt = t;

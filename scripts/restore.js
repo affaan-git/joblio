@@ -107,7 +107,7 @@ function usage() {
   console.log('Usage: node ./scripts/restore.js --file <backup-file> --yes');
 }
 
-(async () => {
+async function main() {
   const args = process.argv.slice(2);
   const yes = args.includes('--yes');
   const idx = args.indexOf('--file');
@@ -172,4 +172,16 @@ function usage() {
   // eslint-disable-next-line no-console
   console.error('Unsupported backup extension. Use .zip or .tar.gz');
   process.exit(1);
-})();
+}
+
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  isSafeArchiveEntry,
+  validateEntries,
+  parseEnvText,
+  loadConfigEnv,
+  main,
+};

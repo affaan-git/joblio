@@ -6,6 +6,7 @@ const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
+const https = require('node:https');
 const { createPasswordHash } = require('../lib/auth');
 
 const root = path.resolve(__dirname, '..');
@@ -18,6 +19,7 @@ const basicPass = process.env.SMOKE_BASIC_PASS || 'smoke-pass';
 const basicAuth = Buffer.from(`${basicUser}:${basicPass}`).toString('base64');
 let cookieJar = '';
 let csrfToken = '';
+let trustedCaPem = '';
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
@@ -50,22 +52,53 @@ async function ensureTlsPair() {
 
 async function req(url, opts = {}) {
   const headers = {
-    Authorization: `Basic ${basicAuth}`,
-    Origin: base,
-    Referer: `${base}/`,
-    ...(cookieJar ? { Cookie: cookieJar } : {}),
+    authorization: `Basic ${basicAuth}`,
+    origin: base,
+    referer: `${base}/`,
+    ...(cookieJar ? { cookie: cookieJar } : {}),
     ...(opts.headers || {}),
   };
-  const res = await fetch(url, { ...opts, headers });
-  const setCookie = res.headers.get('set-cookie');
-  if (setCookie) {
-    const cookie = setCookie.split(';')[0];
-    if (cookie) cookieJar = cookie;
-  }
-  let body = null;
-  const text = await res.text();
-  try { body = text ? JSON.parse(text) : null; } catch { body = text; }
-  return { res, body };
+  const method = String(opts.method || 'GET').toUpperCase();
+  const body = typeof opts.body === 'string' ? opts.body : '';
+  if (body && !headers['content-length']) headers['content-length'] = String(Buffer.byteLength(body));
+  return new Promise((resolve, reject) => {
+    const reqUrl = new URL(url);
+    const reqObj = https.request({
+      protocol: reqUrl.protocol,
+      hostname: reqUrl.hostname,
+      port: reqUrl.port,
+      path: `${reqUrl.pathname}${reqUrl.search}`,
+      method,
+      headers,
+      ca: trustedCaPem,
+      rejectUnauthorized: true,
+    }, (res) => {
+      const setCookie = res.headers['set-cookie'];
+      const firstCookie = Array.isArray(setCookie) ? setCookie[0] : setCookie;
+      if (firstCookie) {
+        const cookie = String(firstCookie).split(';')[0];
+        if (cookie) cookieJar = cookie;
+      }
+      const chunks = [];
+      res.on('data', (d) => chunks.push(Buffer.from(d)));
+      res.on('end', () => {
+        const text = Buffer.concat(chunks).toString('utf8');
+        let parsed = null;
+        try { parsed = text ? JSON.parse(text) : null; } catch { parsed = text; }
+        resolve({
+          res: {
+            ok: res.statusCode >= 200 && res.statusCode < 300,
+            status: res.statusCode,
+            headers: res.headers,
+          },
+          body: parsed,
+        });
+      });
+    });
+    reqObj.on('error', reject);
+    if (body) reqObj.write(body);
+    reqObj.end();
+  });
 }
 
 async function waitForServer(timeoutMs = 8000) {
@@ -81,8 +114,8 @@ async function waitForServer(timeoutMs = 8000) {
 }
 
 (async () => {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
   const tls = await ensureTlsPair();
+  trustedCaPem = await fsp.readFile(tls.certPath, 'utf8');
   const env = {
     ...process.env,
     HOST: host,

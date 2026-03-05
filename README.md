@@ -338,6 +338,7 @@ Core:
 Validation/ops:
 
 - `npm run preflight`
+- `npm run security:check`
 - `npm run test:security`
 - `npm run smoke`
 - `npm run validate:release`
@@ -350,8 +351,10 @@ Validation/ops:
 - `scripts/setup.js` - interactive configuration
 - `scripts/start.js` - unified startup path
 - `scripts/preflight.js` - startup checks
+- `scripts/security-check.js` - config and security posture checks
 - `scripts/gen-local-tls.js` - local TLS cert generation helper
 - `scripts/security-tests.js` - auth/hash unit tests
+- `scripts/restore-tests.js` - restore archive path-safety tests
 - `scripts/smoke-test.js` - integration checks
 - `scripts/backup.js` - data backup
 - `scripts/restore.js` - data restore
@@ -385,3 +388,7 @@ Session invalid behavior:
 Smoke test skipped:
 
 - Some restricted environments do not allow local listen sockets.
+
+Security check fails with missing config:
+
+- Run `npm run setup` first to generate `.joblio-data/config.env`.
