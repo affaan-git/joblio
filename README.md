@@ -5,7 +5,9 @@ A local, single-user job application tracker.
 ![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js)
 ![JavaScript](https://img.shields.io/badge/JavaScript-ES6%2B-F7DF1E?logo=javascript)
 
-> NOTE: Joblio is early-stage software and is used at your own risk. Do NOT expose it beyond your local/private network.
+> WARNING: Joblio is local-first software.
+> Do not expose it directly to the internet or public interfaces.
+> Internet/public deployment is outside supported security scope.
 
 ## What Joblio Does
 
@@ -26,6 +28,14 @@ Issues during setup? Jump to [Troubleshooting](#troubleshooting).
 - [`OpenSSL`](https://www.openssl.org/) (required for `npm run tls:gen` and smoke test TLS generation)
 
 ### Installation
+
+#### Security First
+
+- Supported deployment: local machine or private local network access only.
+- Unsupported deployment: direct public internet exposure.
+- If you need remote access, use a private reverse proxy/VPN design and keep Joblio bound to localhost.
+- If you use a reverse proxy and need real client IP handling:
+  configure `JOBLIO_IP_ALLOWLIST` first, verify it, and only then enable `JOBLIO_TRUST_PROXY=1`.
 
 Clone the repository
 
@@ -52,7 +62,6 @@ Recommended choices during setup:
 - TLS is HTTPS-only (`require`) and cannot be disabled
 - Strong password (12+ chars minimum; longer recommended)
 - Avoid changing host binding to public interfaces.
-- If running behind proxy, configure and verify `JOBLIO_IP_ALLOWLIST` and only then enable `JOBLIO_TRUST_PROXY`.
 
 Start Joblio
 
@@ -106,7 +115,8 @@ Important for Docker setup prompts:
 
 - Host is locked to localhost-only binding.
 - Prefer loopback-only host publishing from Docker (default: `127.0.0.1:8787:8787`) and avoid public exposure.
-- Use TLS settings appropriate for containerized cert paths if enabling HTTPS
+- Configure TLS cert/key paths appropriate for containerized paths.
+- If proxying traffic, set `JOBLIO_IP_ALLOWLIST` first and then enable `JOBLIO_TRUST_PROXY=1`.
 
 Start service:
 
