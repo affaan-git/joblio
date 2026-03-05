@@ -5,7 +5,7 @@ A local, single-user job application tracker.
 ![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js)
 ![JavaScript](https://img.shields.io/badge/JavaScript-ES6%2B-F7DF1E?logo=javascript)
 
-> NOTE: Joblio is use at own risk (early development, security risks, etc.) and NOT recommended to be exposed past local network.
+> NOTE: Joblio is early-stage software and is used at your own risk. Do not expose it beyond your local/private network.
 
 ## What Joblio Does
 
@@ -18,17 +18,19 @@ A local, single-user job application tracker.
 
 ## Getting Started
 
+Issues during setup? Jump to [Troubleshooting](#troubleshooting).
+
 ### Prerequisites
 
-- `Node.js 20+`
-- `OpenSSL (for TLS cert/key paths using npm run tls:gen)`
+- [`Node.js 20+`](https://nodejs.org/) ([download](https://nodejs.org/en/download))
+- [`OpenSSL`](https://www.openssl.org/) (only if you want to generate local TLS certs with `npm run tls:gen`)
 
 ### Installation
 
-Clone repository
+Clone the repository
 
 ```sh
-gitclone https://github.com/affaan-git/joblio.git
+git clone https://github.com/affaan-git/joblio.git
 cd joblio
 ```
 
@@ -52,51 +54,38 @@ Recommended choices during setup:
 - Strong password (12+ chars minimum; longer recommended)
 - Avoid `0.0.0.0` and public interface binding unless you are intentionally operating behind strict network controls.
 
-Start Joblio and run validation
+Start Joblio
 
 ```sh
 npm start
-npm run validate:release
 ```
 
 ## Usage
 
-After initial installation
+After installation, use the same startup command from [Getting Started](#getting-started):
+
+- `npm start`
+
+`npm start` will:
+
+- Load `.joblio-data/config.env`
+- Run preflight validation
+- Start backend server
+
+> The UI URL is printed to the terminal at startup.
+
+Recommended after setup or major changes:
 
 ```sh
-npm start
+npm run validate:release
 ```
-
-Will load the existing config and start Joblio.
-
-> Web url for UI access will be printed to terminal.
 
 ## Reconfiguration
 
-- Run `npm setup` to prompt for updating existing config
-- Run `npm run reconfigure` to open edit flow directly for existing config
+- Run `npm run reconfigure` to edit an existing configuration directly.
+- Run `npm run setup` if you want the same setup flow with update prompt behavior.
 
-## Troubleshooting
-
-Setup needs interactive terminal:
-
-- If setup fails with TTY error, run `npm run setup` directly in an interactive terminal.
-
-Missing config at startup:
-
-- Run `npm run setup` first.
-
-TLS startup failure:
-
-- Verify cert/key files exist and paths are correct in setup.
-
-Session invalid behavior:
-
-- Use UI “Revoke all sessions” and sign in again.
-
-Smoke test skipped:
-
-- Some restricted environments do not allow local listen sockets.
+> Recommended: run `npm run validate:release` from [Usage](#usage) after config changes.
 
 ## Docker support
 
@@ -108,7 +97,7 @@ Files:
 First-time container setup:
 
 ```sh
-cd tracker
+cd joblio
 docker compose build
 docker compose run --rm -it joblio npm run setup
 ```
@@ -125,25 +114,16 @@ Start service:
 docker compose up -d
 ```
 
-Persistent data is mounted at `tracker/docker-data` -> `/app/.joblio-data`
+Persistent data is mounted at `./docker-data` -> `/app/.joblio-data`
 
 ## Architecture
 
 - JavaScript Frontend: `Joblio.html`
 - Node.js Backend: `server.js` (serves UI and API)
-- JavsScript Scripts: `scripts/`
+- JavaScript Scripts: `scripts/`
 - Data directory: `.joblio-data/`
 
 Single-process Node.js app. No external database required.
-
-## `npm start` behavior
-
-- Loads `.joblio-data/config.env`
-- Runs preflight validation
-- Starts backend server
-
-If config is missing and startup is interactive, setup is launched automatically.
-If config is missing and startup is non-interactive, startup fails with guidance.
 
 ## Connection Model
 
@@ -187,7 +167,7 @@ If config is missing and startup is non-interactive, startup fails with guidance
 - Default-safe posture is loopback-only (`127.0.0.1`) with remote binding disabled.
 - Exposing Joblio directly to public networks increases attack surface and is not recommended.
 
-## References
+## Technical Reference
 
 ### Interactive Setup
 
@@ -349,3 +329,25 @@ Validation/ops:
 - No multi-tenant isolation model
 - No external identity provider integration
 - No cloud-managed deployment stack included
+
+## Troubleshooting
+
+Setup needs interactive terminal:
+
+- If setup fails with TTY error, run `npm run setup` directly in an interactive terminal.
+
+Missing config at startup:
+
+- Run `npm run setup` first.
+
+TLS startup failure:
+
+- Verify cert/key files exist and paths are correct in setup.
+
+Session invalid behavior:
+
+- Use UI “Revoke all sessions” and sign in again.
+
+Smoke test skipped:
+
+- Some restricted environments do not allow local listen sockets.
