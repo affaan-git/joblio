@@ -32,8 +32,8 @@ const API_TOKEN = process.env.JOBLIO_API_TOKEN || '';
 const BASIC_AUTH_USER = process.env.JOBLIO_BASIC_AUTH_USER || '';
 const BASIC_AUTH_HASH = process.env.JOBLIO_BASIC_AUTH_HASH || '';
 const AUDIT_KEY = process.env.JOBLIO_AUDIT_KEY || '';
-const HEALTH_VERBOSE = process.env.JOBLIO_HEALTH_VERBOSE === '1';
-const ERROR_VERBOSE = process.env.JOBLIO_ERROR_VERBOSE === '1';
+const HEALTH_VERBOSE = false;
+const ERROR_VERBOSE = false;
 const SNAPSHOT_DIR = path.join(DATA_DIR, 'snapshots');
 const MAX_SNAPSHOTS = Number(process.env.MAX_SNAPSHOTS || 20);
 const PURGE_MIN_AGE_SEC = Number(process.env.PURGE_MIN_AGE_SEC || 120);
@@ -55,7 +55,6 @@ const TRUST_PROXY = process.env.JOBLIO_TRUST_PROXY === '1';
 const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 8 * 60 * 60 * 1000);
 const SESSION_ABS_TTL_MS = Number(process.env.SESSION_ABS_TTL_MS || 24 * 60 * 60 * 1000);
 const SESSION_COOKIE_NAME = 'joblio_sid';
-const SESSION_BINDING = process.env.JOBLIO_SESSION_BINDING || 'strict'; // strict | ip | ua | off
 const SAFE_ID_RE = /^[a-zA-Z0-9_-]{6,100}$/;
 const ALLOWED_STATUS = new Set(['wishlist', 'in_progress', 'applied', 'interview', 'offer', 'rejected', 'closed']);
 const ALLOWED_THEME = new Set(['dark', 'light']);
@@ -173,9 +172,6 @@ function validateStartupConfig() {
   if (BASIC_AUTH_HASH && !String(BASIC_AUTH_HASH).startsWith('scrypt$')) {
     throw new Error('JOBLIO_BASIC_AUTH_HASH must be in scrypt$... format. Run: npm run setup');
   }
-  if (!new Set(['strict', 'ip', 'ua', 'off']).has(SESSION_BINDING)) {
-    throw new Error('JOBLIO_SESSION_BINDING must be one of: strict, ip, ua, off');
-  }
   if (RATE_MAX_AUTH_SESSION <= 0) {
     throw new Error('RATE_MAX_AUTH_SESSION must be > 0');
   }
@@ -190,6 +186,9 @@ function validateStartupConfig() {
   }
   if (AUTH_GUARD_MAX_ENTRIES <= 0) {
     throw new Error('AUTH_GUARD_MAX_ENTRIES must be > 0');
+  }
+  if (TRUST_PROXY && !IP_ALLOWLIST.length) {
+    throw new Error('JOBLIO_TRUST_PROXY=1 requires a non-empty JOBLIO_IP_ALLOWLIST.');
   }
   if (!TLS_CERT_PATH || !TLS_KEY_PATH) {
     throw new Error('TLS enabled but JOBLIO_TLS_CERT_PATH or JOBLIO_TLS_KEY_PATH is missing.');
@@ -574,7 +573,7 @@ function filePathInDir(dir, filename) {
   return resolved;
 }
 
-function applySecurityHeaders(res) {
+function applySecurityHeaders(res, cspNonce = '') {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'no-referrer');
@@ -584,7 +583,8 @@ function applySecurityHeaders(res) {
   if (transportIsTls) {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   }
-  res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+  const scriptPolicy = cspNonce ? `'self' 'nonce-${cspNonce}'` : "'none'";
+  res.setHeader('Content-Security-Policy', `default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src ${scriptPolicy}; connect-src 'self'; font-src 'self'; object-src 'none'; frame-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`);
 }
 
 function requireWriteAuth(req, res) {
@@ -716,8 +716,7 @@ function isTrustedRequestOrigin(req) {
       return false;
     }
   }
-  // Allow non-browser clients (curl/scripts) with no origin headers.
-  return true;
+  return false;
 }
 
 function parseCookies(req) {
@@ -742,9 +741,6 @@ function hashSessionParts(...parts) {
 function sessionBindingMaterial(req) {
   const ua = str(req.headers['user-agent'], 300);
   const ip = getClientIp(req);
-  if (SESSION_BINDING === 'off') return '';
-  if (SESSION_BINDING === 'ip') return `ip:${ip}`;
-  if (SESSION_BINDING === 'ua') return `ua:${ua}`;
   return `ua:${ua}|ip:${ip}`;
 }
 
@@ -1045,7 +1041,7 @@ async function handleApi(req, res, url) {
       await verifyAuditLog();
     }
     const wantsVerbose = url.searchParams.get('verbose') === '1';
-    const canViewVerbose = HEALTH_VERBOSE || Boolean(session);
+    const canViewVerbose = HEALTH_VERBOSE;
     const base = { ok: true, at: new Date().toISOString() };
     if (!(wantsVerbose && canViewVerbose)) return json(res, 200, base);
     return json(res, 200, {
@@ -1076,7 +1072,7 @@ async function handleApi(req, res, url) {
         trustProxy: TRUST_PROXY,
         sessionTtlMs: SESSION_TTL_MS,
         sessionAbsTtlMs: SESSION_ABS_TTL_MS,
-        sessionBinding: SESSION_BINDING,
+        sessionBinding: 'strict',
       },
       audit: auditIntegrity,
     });
@@ -1351,8 +1347,10 @@ async function serveStatic(req, res, url) {
     return notFound(res);
   }
   if (url.pathname === '/' || url.pathname === '/Joblio.html') {
-    const html = await fsp.readFile(APP_HTML, 'utf8');
-    applySecurityHeaders(res);
+    const nonce = crypto.randomBytes(18).toString('base64');
+    const htmlRaw = await fsp.readFile(APP_HTML, 'utf8');
+    const html = htmlRaw.replace(/<script\b/gi, `<script nonce="${nonce}"`);
+    applySecurityHeaders(res, nonce);
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(html);
     return;

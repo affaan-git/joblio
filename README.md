@@ -156,7 +156,7 @@ Single-process Node.js app. No external database required.
 ### Session
 
 - Idle timeout + absolute timeout
-- Session binding mode (`strict`, `ip`, `ua`, `off`)
+- Session binding is strict and required
 - Encrypted on-disk session store (`sessions.enc`)
 - Global revoke-all sessions endpoint
 
@@ -172,7 +172,7 @@ Single-process Node.js app. No external database required.
 ### Response
 
 - Security headers (CSP, frame deny, nosniff, etc.)
-- Generic 500 errors unless verbose mode explicitly enabled
+- Generic 500 errors (internal error detail hidden)
 - Public-safe mapping of thrown 4xx errors
 
 ### Network exposure risk
@@ -236,9 +236,6 @@ These keys are written by setup and used at runtime.
 | `JOBLIO_DATA_DIR` | `.joblio-data` | Runtime state/log/storage root |
 | `JOBLIO_BACKUP_DIR` | `backups` | Backup output directory |
 | `JOBLIO_COOKIE_SECURE` | `1` | Force `Secure` cookie attribute |
-| `JOBLIO_SESSION_BINDING` | `strict` | Session binding policy |
-| `JOBLIO_HEALTH_VERBOSE` | `0` | Verbose health policy |
-| `JOBLIO_ERROR_VERBOSE` | `0` | Internal error detail policy |
 | `RATE_MAX_AUTH_SESSION` | `45` | Auth session requests per rate window |
 | `AUTH_FAIL_WINDOW_MS` | `600000` | Failure window for lockout counter |
 | `AUTH_FAIL_THRESHOLD` | `5` | Failures before lockout |
@@ -299,7 +296,7 @@ State/health:
 - `GET /api/state`
 - `PUT /api/state`
 - `GET /api/health`
-- `GET /api/health?verbose=1`
+- `GET /api/health?verbose=1` (verbose fields are restricted by server policy)
 - `GET /api/integrity/verify`
 
 Files:

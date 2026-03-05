@@ -51,6 +51,8 @@ async function ensureTlsPair() {
 async function req(url, opts = {}) {
   const headers = {
     Authorization: `Basic ${basicAuth}`,
+    Origin: base,
+    Referer: `${base}/`,
     ...(cookieJar ? { Cookie: cookieJar } : {}),
     ...(opts.headers || {}),
   };
@@ -91,7 +93,6 @@ async function waitForServer(timeoutMs = 8000) {
     JOBLIO_BASIC_AUTH_USER: basicUser,
     JOBLIO_BASIC_AUTH_HASH: createPasswordHash(basicPass),
     PURGE_MIN_AGE_SEC: '0',
-    JOBLIO_HEALTH_VERBOSE: '1',
   };
 
   const child = spawn(process.execPath, ['server.js'], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });

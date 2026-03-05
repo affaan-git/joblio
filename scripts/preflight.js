@@ -71,6 +71,9 @@ if (ipAllowlistRaw.trim() && !parsedAllowlist.length) {
 if (parsedAllowlist.length && !trustProxy) {
   warns.push('JOBLIO_IP_ALLOWLIST is enabled while JOBLIO_TRUST_PROXY=0. Only socket remoteAddress will be used for IP checks.');
 }
+if (trustProxy && !parsedAllowlist.length) {
+  issues.push('JOBLIO_TRUST_PROXY=1 requires a non-empty JOBLIO_IP_ALLOWLIST.');
+}
 
 try {
   fs.mkdirSync(dataDir, { recursive: true });
