@@ -584,7 +584,8 @@ function applySecurityHeaders(res, cspNonce = '') {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   }
   const scriptPolicy = cspNonce ? `'self' 'nonce-${cspNonce}'` : "'none'";
-  res.setHeader('Content-Security-Policy', `default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src ${scriptPolicy}; connect-src 'self'; font-src 'self'; object-src 'none'; frame-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`);
+  const stylePolicy = cspNonce ? `'self' 'nonce-${cspNonce}'` : "'none'";
+  res.setHeader('Content-Security-Policy', `default-src 'self'; img-src 'self' data: blob:; style-src ${stylePolicy}; script-src ${scriptPolicy}; connect-src 'self'; font-src 'self'; object-src 'none'; frame-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`);
 }
 
 function requireWriteAuth(req, res) {
@@ -1349,7 +1350,9 @@ async function serveStatic(req, res, url) {
   if (url.pathname === '/' || url.pathname === '/Joblio.html') {
     const nonce = crypto.randomBytes(18).toString('base64');
     const htmlRaw = await fsp.readFile(APP_HTML, 'utf8');
-    const html = htmlRaw.replace(/<script\b/gi, `<script nonce="${nonce}"`);
+    const html = htmlRaw
+      .replace(/<style\b/gi, `<style nonce="${nonce}"`)
+      .replace(/<script\b/gi, `<script nonce="${nonce}"`);
     applySecurityHeaders(res, nonce);
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(html);

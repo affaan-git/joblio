@@ -228,6 +228,10 @@
       box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.16);
     }
 
+    #backendHealth {
+      cursor: pointer;
+    }
+
     .backend-banner {
       display: none;
       align-items: center;
@@ -638,6 +642,62 @@
       height: 34px;
     }
 
+    .is-hidden {
+      display: none !important;
+    }
+
+    .u-flex-end {
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .u-flex-end-gap {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.45rem;
+    }
+
+    .u-grid-gap-sm {
+      display: grid;
+      gap: 0.4rem;
+    }
+
+    .u-grid-gap-xs {
+      display: grid;
+      gap: 0.16rem;
+    }
+
+    .u-flex-gap-xs {
+      display: flex;
+      gap: 0.4rem;
+    }
+
+    .u-section-caption {
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .u-strong-sm {
+      font-size: 0.8rem;
+    }
+
+    .health-dialog-body {
+      display: grid;
+      gap: 0.4rem;
+      max-height: 50vh;
+      overflow: auto;
+    }
+
+    .health-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.9rem;
+    }
+
+    .text-muted {
+      color: var(--text-muted);
+    }
+
     .drop-zone.has-files .drop-zone-subtext {
       display: none;
     }
@@ -979,6 +1039,7 @@
       .status-dialog-grid { grid-template-columns: 1fr; }
     }
   </style>
+  <style id="runtimeLayoutStyle"></style>
 </head>
 <body>
   <header class="top-bar">
@@ -1010,7 +1071,7 @@
             <label for="modeFilter">Work mode</label>
             <select id="modeFilter"></select>
           </div>
-          <div id="filterActions" class="filter-actions" style="display:none;">
+          <div id="filterActions" class="filter-actions is-hidden">
             <button id="resetFiltersBtn" class="btn" type="button">Reset filters</button>
           </div>
         </div>
@@ -1031,7 +1092,7 @@
           <button id="importBtn">Import JSON</button>
         </div>
       </div>
-      <input id="importInput" type="file" accept="application/json" style="display:none;" />
+      <input id="importInput" type="file" accept="application/json" class="is-hidden" />
       <button id="themeToggle" class="btn" title="Toggle theme" aria-label="Toggle theme">☀</button>
       <button id="trashBtn" class="btn" title="Recently deleted">Trash</button>
       <button id="newBtn" class="btn primary" title="Create new application (N)">+ New</button>
@@ -1087,7 +1148,7 @@
         <label class="label" for="newPostText">Job description (optional)</label>
         <textarea id="newPostText" placeholder="Paste the job posting text here..."></textarea>
       </div>
-      <div style="display:flex; justify-content:flex-end; gap:0.45rem;">
+      <div class="u-flex-end-gap">
         <button id="newCancel" class="btn">Cancel</button>
         <button id="newCreate" class="btn primary">Create</button>
       </div>
@@ -1099,15 +1160,15 @@
   <div class="dialog-wrap" id="trashDialog">
     <div class="dialog">
       <div class="section-title">Recently deleted</div>
-      <div style="display:grid; gap:0.4rem;">
-        <div class="small" style="font-weight:600; color:var(--text);">Applications</div>
+      <div class="u-grid-gap-sm">
+        <div class="small u-section-caption">Applications</div>
         <div id="trashAppsList" class="status-history-list"></div>
       </div>
-      <div style="display:grid; gap:0.4rem;">
-        <div class="small" style="font-weight:600; color:var(--text);">Files</div>
+      <div class="u-grid-gap-sm">
+        <div class="small u-section-caption">Files</div>
         <div id="trashFilesList" class="status-history-list"></div>
       </div>
-      <div style="display:flex; justify-content:flex-end;">
+      <div class="u-flex-end">
         <button id="trashClose" class="btn">Close</button>
       </div>
     </div>
@@ -1132,8 +1193,8 @@
           <button class="dialog-btn" data-status-action="cancel">Cancel</button>
         </div>
       </div>
-      <div id="statusHistoryView" style="display:none;">
-        <div style="display:flex; justify-content:flex-end;">
+      <div id="statusHistoryView" class="is-hidden">
+        <div class="u-flex-end">
           <button id="clearStatusHistoryBtn" class="btn">Clear history</button>
         </div>
         <div id="statusHistoryList" class="status-history-list"></div>
@@ -1144,8 +1205,8 @@
   <div class="dialog-wrap" id="healthDialog">
     <div class="dialog">
       <div class="section-title">Backend health</div>
-      <div id="healthDialogBody" class="small" style="display:grid; gap:0.4rem; max-height:50vh; overflow:auto;"></div>
-      <div style="display:flex; justify-content:flex-end; gap:0.45rem;">
+      <div id="healthDialogBody" class="small health-dialog-body"></div>
+      <div class="u-flex-end-gap">
         <button id="refreshHealthBtn" class="btn">Refresh</button>
         <button id="closeHealthBtn" class="btn">Close</button>
       </div>
@@ -1212,6 +1273,7 @@
     const revokeSessionsBtn = document.getElementById("revokeSessionsBtn");
     const resumeTemplateBtn = document.getElementById("resumeTemplateBtn");
     const importInput = document.getElementById("importInput");
+    const runtimeLayoutStyle = document.getElementById("runtimeLayoutStyle");
 
     const newBtn = document.getElementById("newBtn");
     const newDialog = document.getElementById("newDialog");
@@ -1270,6 +1332,12 @@
         hour: "numeric",
         minute: "2-digit",
       });
+    }
+
+    function setLeftPanelWidth(px) {
+      if (!runtimeLayoutStyle) return;
+      const rounded = Math.round(px);
+      runtimeLayoutStyle.textContent = `:root{--left-panel-width:${rounded}px;}`;
     }
 
     function isOverdueDate(dateStr) {
@@ -1554,9 +1622,9 @@
         ];
         healthDialogBody.innerHTML = rows
           .map(([label, value]) => `
-            <div style="display:flex; justify-content:space-between; gap:0.9rem;">
-              <span class="small" style="color:var(--text-muted)">${escapeHtml(label)}</span>
-              <span class="small" style="color:var(--text)">${value}</span>
+            <div class="health-row">
+              <span class="small text-muted">${escapeHtml(label)}</span>
+              <span class="small">${value}</span>
             </div>
           `)
           .join("");
@@ -1663,7 +1731,7 @@
       const savedWidth = Number(localStorage.getItem(LEFT_WIDTH_KEY));
       if (savedWidth && Number.isFinite(savedWidth)) {
         const clamped = Math.max(LEFT_PANEL_MIN, Math.min(LEFT_PANEL_MAX, savedWidth));
-        document.documentElement.style.setProperty("--left-panel-width", `${clamped}px`);
+        setLeftPanelWidth(clamped);
       }
     }
 
@@ -1845,7 +1913,7 @@
 
       const activeCount = [state.statusFilter !== "all", state.modeFilter !== "all"].filter(Boolean).length;
       filtersBtn.textContent = activeCount ? `Filters (${activeCount})` : "Filters";
-      filterActions.style.display = activeCount ? "flex" : "none";
+      filterActions.classList.toggle("is-hidden", !activeCount);
 
       newMode.innerHTML = MODES.map((m) => `<option value=\"${m}\">${m}</option>`).join("");
       newMode.value = "Unknown";
@@ -1953,12 +2021,12 @@
         trashAppsList.innerHTML = state.trashApps
         .map((app) => `
           <div class="status-history-item">
-            <div style="display:grid; gap:0.16rem;">
-              <strong style="font-size:0.8rem;">${escapeHtml(app.title)}</strong>
+            <div class="u-grid-gap-xs">
+              <strong class="u-strong-sm">${escapeHtml(app.title)}</strong>
               <span class="small">${escapeHtml(app.company)}${app.location ? ` • ${escapeHtml(app.location)}` : ""}</span>
               <span class="small">Deleted ${escapeHtml(fmtDate(app.deletedAt || app.updatedAt || nowIso()))}</span>
             </div>
-            <div style="display:flex; gap:0.4rem;">
+            <div class="u-flex-gap-xs">
               <button class="btn" data-trash-restore="${escapeHtml(app.id)}">Restore</button>
               <button class="btn" data-trash-purge="${escapeHtml(app.id)}">Delete</button>
             </div>
@@ -1980,12 +2048,12 @@
         trashFilesList.innerHTML = state.trashFiles
           .map((file) => `
             <div class="status-history-item">
-              <div style="display:grid; gap:0.16rem;">
-                <strong style="font-size:0.8rem;">${escapeHtml(file.name || "Untitled file")}</strong>
+              <div class="u-grid-gap-xs">
+                <strong class="u-strong-sm">${escapeHtml(file.name || "Untitled file")}</strong>
                 <span class="small">From app: ${escapeHtml((state.apps.find((a) => a.id === file.appId) || state.trashApps.find((a) => a.id === file.appId))?.title || "Original app removed")}</span>
                 <span class="small">Deleted ${escapeHtml(fmtDate(file.deletedAt || nowIso()))}</span>
               </div>
-              <div style="display:flex; gap:0.4rem;">
+              <div class="u-flex-gap-xs">
                 <button class="btn" data-trash-file-restore="${escapeHtml(file.id)}">Restore</button>
                 <button class="btn" data-trash-file-purge="${escapeHtml(file.id)}" data-trash-file-name="${escapeHtml(file.name || "")}">Delete</button>
               </div>
@@ -2169,8 +2237,8 @@
 
     function setStatusDialogView(view) {
       const showUpdate = view !== "history";
-      statusUpdateView.style.display = showUpdate ? "" : "none";
-      statusHistoryView.style.display = showUpdate ? "none" : "";
+      statusUpdateView.classList.toggle("is-hidden", !showUpdate);
+      statusHistoryView.classList.toggle("is-hidden", showUpdate);
       statusTabUpdate.classList.toggle("active", showUpdate);
       statusTabHistory.classList.toggle("active", !showUpdate);
     }
@@ -2239,7 +2307,7 @@
                 <div class="drop-zone-subtext">No files added</div>
               </div>
               <div class="drop-zone-copy-spacer" aria-hidden="true"></div>
-              <input id="workspaceFileInput" type="file" multiple style="display:none;" />
+              <input id="workspaceFileInput" type="file" multiple class="is-hidden" />
               <div class="workspace-files" id="workspaceFiles"></div>
             </div>
           </section>
@@ -2555,12 +2623,12 @@
 
       function applyWidth(px) {
         const clamped = Math.max(LEFT_PANEL_MIN, Math.min(LEFT_PANEL_MAX, px));
-        document.documentElement.style.setProperty("--left-panel-width", `${clamped}px`);
+        setLeftPanelWidth(clamped);
         localStorage.setItem(LEFT_WIDTH_KEY, String(clamped));
       }
 
       colResizer.addEventListener("dblclick", () => {
-        document.documentElement.style.setProperty("--left-panel-width", `${LEFT_PANEL_DEFAULT}px`);
+        setLeftPanelWidth(LEFT_PANEL_DEFAULT);
         localStorage.setItem(LEFT_WIDTH_KEY, String(LEFT_PANEL_DEFAULT));
       });
 
@@ -2665,7 +2733,6 @@
         showToast("Could not revoke sessions.", "error");
       }
     });
-    backendHealth.style.cursor = "pointer";
     backendHealth.addEventListener("click", async () => {
       dataMenu.classList.remove("open");
       await openHealthDialog();
