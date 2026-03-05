@@ -55,6 +55,7 @@ const TRUST_PROXY = process.env.JOBLIO_TRUST_PROXY === '1';
 const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 8 * 60 * 60 * 1000);
 const SESSION_ABS_TTL_MS = Number(process.env.SESSION_ABS_TTL_MS || 24 * 60 * 60 * 1000);
 const SESSION_COOKIE_NAME = 'joblio_sid';
+const SERVER_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 const SAFE_ID_RE = /^[a-zA-Z0-9_-]{6,100}$/;
 const ALLOWED_STATUS = new Set(['wishlist', 'in_progress', 'applied', 'interview', 'offer', 'rejected', 'closed']);
 const ALLOWED_THEME = new Set(['dark', 'light']);
@@ -1010,6 +1011,7 @@ async function handleApi(req, res, url) {
       csrfToken: session.csrfToken,
       expiresInSec: Math.floor(SESSION_TTL_MS / 1000),
       at: new Date().toISOString(),
+      serverTimeZone: SERVER_TIME_ZONE,
     });
   }
 
@@ -1043,7 +1045,7 @@ async function handleApi(req, res, url) {
     }
     const wantsVerbose = url.searchParams.get('verbose') === '1';
     const canViewVerbose = HEALTH_VERBOSE;
-    const base = { ok: true, at: new Date().toISOString() };
+    const base = { ok: true, at: new Date().toISOString(), serverTimeZone: SERVER_TIME_ZONE };
     if (!(wantsVerbose && canViewVerbose)) return json(res, 200, base);
     return json(res, 200, {
       ...base,

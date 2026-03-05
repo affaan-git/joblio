@@ -590,6 +590,7 @@
     input[type="text"],
     input[type="url"],
     input[type="date"],
+    input[type="time"],
     textarea {
       border: 1px solid var(--border);
       background: var(--bg-panel);
@@ -1274,6 +1275,8 @@
     const resumeTemplateBtn = document.getElementById("resumeTemplateBtn");
     const importInput = document.getElementById("importInput");
     const runtimeLayoutStyle = document.getElementById("runtimeLayoutStyle");
+    const backendBannerText = backendBanner.querySelector("span");
+    const IS_DIRECT_FILE_MODE = window.location.protocol === "file:";
 
     const newBtn = document.getElementById("newBtn");
     const newDialog = document.getElementById("newDialog");
@@ -1306,9 +1309,13 @@
     const LEFT_PANEL_MAX = 620;
     let saveToastTimer = null;
     let lastSavedToastAt = 0;
+    let lastBackendSaveErrorToastAt = 0;
+    const BACKEND_SAVE_ERROR_TOAST_COOLDOWN_MS = 15000;
     let csrfToken = "";
     let sessionReady = false;
     let sessionBootstrapInFlight = null;
+    let serverTimeZone = "UTC";
+    let serverNowIso = "";
 
     function uid() {
       return `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -1322,6 +1329,40 @@
       return new Date().toISOString().slice(0, 10);
     }
 
+    function nowTimeStr() {
+      const d = new Date();
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      return `${hh}:${mm}`;
+    }
+
+    function normalizeHHMM(v) {
+      const raw = String(v || "").trim();
+      return /^\d{2}:\d{2}$/.test(raw) ? raw : "";
+    }
+
+    function normalizeTimeZone(v) {
+      const tz = String(v || "").trim();
+      return tz || "UTC";
+    }
+
+    function hhmmFromIsoInTimeZone(iso, timeZone) {
+      if (!iso) return "";
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return "";
+      try {
+        const out = new Intl.DateTimeFormat("en-GB", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+          timeZone: normalizeTimeZone(timeZone),
+        }).format(d);
+        return normalizeHHMM(out);
+      } catch {
+        return "";
+      }
+    }
+
     function fmtDate(iso) {
       if (!iso) return "";
       const d = new Date(iso);
@@ -1331,6 +1372,20 @@
         day: "numeric",
         hour: "numeric",
         minute: "2-digit",
+      });
+    }
+
+    function fmtDateUtc(iso) {
+      if (!iso) return "";
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return "";
+      return d.toLocaleString([], {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        timeZone: "UTC",
+        timeZoneName: "short",
       });
     }
 
@@ -1406,6 +1461,9 @@
           .slice(0, 200)
         : [];
       merged.descriptionText = String(merged.descriptionText || merged.intakeText || "");
+      if (typeof app.appliedTime !== "string") {
+        merged.appliedTime = "";
+      }
       if ("intakeText" in merged) delete merged.intakeText;
       return merged;
     }
@@ -1451,6 +1509,13 @@
       }, 700);
     }
 
+    function showBackendSaveErrorToast() {
+      const now = Date.now();
+      if (now - lastBackendSaveErrorToastAt < BACKEND_SAVE_ERROR_TOAST_COOLDOWN_MS) return;
+      showToast("Could not save to backend.", "error");
+      lastBackendSaveErrorToastAt = now;
+    }
+
     function createApp({ company, title, location = "", workMode = "Unknown" }) {
       const t = nowIso();
       return {
@@ -1463,7 +1528,7 @@
         statusHistory: [{ status: "wishlist", at: t }],
         statusUpdatedAt: t,
         appliedAt: "",
-        nextFollowUpAt: "",
+        appliedTime: hhmmFromIsoInTimeZone(serverNowIso, serverTimeZone) || nowTimeStr(),
         jobUrl: "",
         applicationUrl: "",
         note: "",
@@ -1475,6 +1540,10 @@
     }
 
     async function bootstrapSession() {
+      if (IS_DIRECT_FILE_MODE) {
+        sessionReady = false;
+        return;
+      }
       if (sessionBootstrapInFlight) return sessionBootstrapInFlight;
       sessionBootstrapInFlight = (async () => {
         const res = await fetch(`${API_BASE}/api/auth/session`, {
@@ -1495,6 +1564,8 @@
         }
         const data = await res.json();
         csrfToken = String(data?.csrfToken || "");
+        serverTimeZone = normalizeTimeZone(data?.serverTimeZone || serverTimeZone);
+        serverNowIso = String(data?.at || serverNowIso);
         sessionReady = Boolean(csrfToken);
       })().finally(() => {
         sessionBootstrapInFlight = null;
@@ -1503,6 +1574,11 @@
     }
 
     async function requestJSON(path, options = {}) {
+      if (IS_DIRECT_FILE_MODE) {
+        const err = new Error("Opened directly, start with npm start and open the URL shown in terminal.");
+        err.status = 0;
+        throw err;
+      }
       const retryAuth = Boolean(options._retryAuth);
       const fetchOptions = { ...options };
       delete fetchOptions._retryAuth;
@@ -1537,6 +1613,11 @@
     }
 
     async function downloadWithAuth(path, filename, retryAuth = false) {
+      if (IS_DIRECT_FILE_MODE) {
+        const err = new Error("Opened directly, start with npm start and open the URL shown in terminal.");
+        err.status = 0;
+        throw err;
+      }
       if (!sessionReady) {
         await bootstrapSession();
       }
@@ -1604,13 +1685,15 @@
       healthDialogBody.innerHTML = `<div class="small">Loading...</div>`;
       try {
         const health = await requestJSON("/api/health?verbose=1");
+        serverTimeZone = normalizeTimeZone(health?.serverTimeZone || serverTimeZone);
+        serverNowIso = String(health?.at || serverNowIso);
         let integrity = { ok: null, audit: null };
         try {
           integrity = await requestJSON("/api/integrity/verify");
         } catch {}
         const rows = [
           ["Status", health.ok ? "OK" : "Error"],
-          ["Server time", fmtDate(health.at)],
+          ["Server time (UTC)", fmtDateUtc(health.at)],
           ["Uptime (sec)", Number.isFinite(health.uptimeSec) ? String(health.uptimeSec) : "Hidden"],
           ["Last error", health.lastError ? escapeHtml(health.lastError) : "None"],
           ["Audit verified", integrity?.ok === true ? "Yes" : integrity?.ok === false ? "No" : "Unavailable"],
@@ -1663,6 +1746,10 @@
     }
 
     function persistNow() {
+      if (IS_DIRECT_FILE_MODE) {
+        setBackendHealth("disconnected", "Offline");
+        return;
+      }
       if (persistInFlight) {
         persistQueued = true;
         return;
@@ -1679,7 +1766,7 @@
         })
         .catch(() => {
           setBackendHealth("disconnected", "Offline");
-          showToast("Could not save to backend.", "error");
+          showBackendSaveErrorToast();
         })
         .finally(() => {
           persistInFlight = false;
@@ -1699,6 +1786,22 @@
     }
 
     async function hydrate() {
+      if (IS_DIRECT_FILE_MODE) {
+        if (!state.apps.length && !state.trashApps.length && !state.trashFiles.length) {
+          state.apps = [
+            createApp({ company: "Q2", title: "Software Engineer", location: "Austin, TX", workMode: "Hybrid" }),
+            createApp({ company: "AWS", title: "Security Automation Engineer", location: "Austin, TX", workMode: "On-site" }),
+          ];
+          state.activeId = state.apps[0]?.id || null;
+        }
+        setBackendHealth("disconnected", "Offline");
+        const savedWidth = Number(localStorage.getItem(LEFT_WIDTH_KEY));
+        if (savedWidth && Number.isFinite(savedWidth)) {
+          const clamped = Math.max(LEFT_PANEL_MIN, Math.min(LEFT_PANEL_MAX, savedWidth));
+          setLeftPanelWidth(clamped);
+        }
+        return;
+      }
       try {
         const payload = await requestJSON("/api/state");
         applyServerState(payload.state || {});
@@ -1736,8 +1839,14 @@
     }
 
     async function pingBackendHealth() {
+      if (IS_DIRECT_FILE_MODE) {
+        setBackendHealth("disconnected", "Offline");
+        return;
+      }
       try {
-        await requestJSON("/api/health");
+        const health = await requestJSON("/api/health");
+        serverTimeZone = normalizeTimeZone(health?.serverTimeZone || serverTimeZone);
+        serverNowIso = String(health?.at || serverNowIso);
         if (!persistInFlight) {
           setBackendHealth("connected", "Online");
         }
@@ -2342,8 +2451,8 @@
                 <input id="fAppliedAt" type="date" value="${escapeHtml(app.appliedAt || "")}" />
               </div>
               <div class="field">
-                <label class="label">Next follow-up</label>
-                <input id="fFollowUp" type="date" value="${escapeHtml(app.nextFollowUpAt || "")}" />
+                <label class="label">Applied time</label>
+                <input id="fAppliedTime" type="time" value="${escapeHtml(app.appliedTime || "")}" />
               </div>
             </div>
           </section>
@@ -2362,7 +2471,7 @@
 
       document.getElementById("fMode").addEventListener("change", (e) => updateField(app, "workMode", e.target.value));
       const appliedInput = document.getElementById("fAppliedAt");
-      const followUpInput = document.getElementById("fFollowUp");
+      const appliedTimeInput = document.getElementById("fAppliedTime");
       appliedInput.addEventListener("change", (e) => {
         const value = e.target.value;
         if (!value) {
@@ -2379,7 +2488,25 @@
         renderList();
         scheduleSavedToast();
       });
-      followUpInput.addEventListener("change", (e) => updateField(app, "nextFollowUpAt", e.target.value));
+      appliedTimeInput.addEventListener("change", (e) => {
+        const value = e.target.value;
+        if (!value) {
+          updateField(app, "appliedTime", "");
+          return;
+        }
+        app.appliedTime = value;
+        if (!app.appliedAt) {
+          app.appliedAt = todayDateStr();
+        }
+        if (app.status !== "applied") {
+          setStatus(app, "applied", { preserveAppliedDate: true });
+          return;
+        }
+        app.updatedAt = nowIso();
+        persist();
+        renderList();
+        scheduleSavedToast();
+      });
 
       document.getElementById("openStatusBtn").addEventListener("click", () => openStatusDialog(app.id, "update"));
       document.getElementById("coreStatusPill").addEventListener("click", () => openStatusDialog(app.id, "history"));
@@ -2885,6 +3012,10 @@
     });
 
     (async () => {
+      if (IS_DIRECT_FILE_MODE) {
+        backendBannerText.textContent = "Backend is offline. Changes cannot be saved. Opened directly, start with npm start and open the URL shown in terminal.";
+        backendBanner.classList.add("show");
+      }
       try {
         await bootstrapSession();
       } catch {}
@@ -2892,7 +3023,9 @@
       setupColumnResizer();
       render();
       pingBackendHealth();
-      setInterval(pingBackendHealth, 30000);
+      if (!IS_DIRECT_FILE_MODE) {
+        setInterval(pingBackendHealth, 30000);
+      }
     })();
   </script>
 </body>
