@@ -1,17 +1,32 @@
 # Joblio
 
-A local, single-user job application tracker.
+A local, single-user job application tracker built to support my job search.
 
 ![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js)
 ![JavaScript](https://img.shields.io/badge/JavaScript-ES6%2B-F7DF1E?logo=javascript)
 
-> WARNING: Joblio is local-first software.
+> WARNING: Joblio is built as local-only software.
 > Do not expose it directly to the internet or public interfaces.
-> Internet/public deployment is outside supported security scope for v1.
+> Internet/public deployment is outside supported security scope.
+
+<img src="docs/images/screenshot-placeholder.svg" alt="Joblio screenshot placeholder" width="600" />
+
+## Table of Contents
+
+- [What Joblio Does](#what-joblio-does)
+- [Getting Started](#getting-started)
+- [Usage](#usage)
+- [Reconfiguration](#reconfiguration)
+- [Docker support](#docker-support)
+- [Architecture](#architecture)
+- [Connection Model](#connection-model)
+- [Technical Reference](#technical-reference)
+- [Scope and Non-Goals (for now)](#scope-and-non-goals-for-now)
+- [Troubleshooting](#troubleshooting)
 
 ## What Joblio Does
 
-- Tracks job applications and status updates
+- Tracks job applications and status changes
 - Stores per-application workspace files
 - Supports trash/restore/purge flows for apps and files
 - Supports import/export of tracker state
@@ -27,7 +42,17 @@ Issues during setup? Jump to [Troubleshooting](#troubleshooting).
 - [`Node.js 20+`](https://nodejs.org/) ([download](https://nodejs.org/en/download))
 - [`OpenSSL`](https://www.openssl.org/) (required for `npm run tls:gen` and smoke test TLS generation)
 
-### Installation
+### Quick Start
+
+```sh
+git clone https://github.com/affaan-git/joblio.git
+cd joblio
+npm run tls:gen
+npm run setup
+npm start
+```
+
+Then open the HTTPS URL printed in your terminal and sign in with your configured Basic Auth credentials.
 
 ### Security First
 
@@ -36,6 +61,8 @@ Issues during setup? Jump to [Troubleshooting](#troubleshooting).
 - If you need remote access, use a private reverse proxy/VPN design and keep Joblio bound to localhost.
 - If you use a reverse proxy and need real client IP handling:
   configure `JOBLIO_IP_ALLOWLIST` first, verify it, and only then enable `JOBLIO_TRUST_PROXY=1`.
+
+### Installation
 
 Clone the repository
 
@@ -56,12 +83,6 @@ Start setup
 npm run setup
 ```
 
-Recommended choices during setup:
-
-- Host is fixed to `127.0.0.1` for local-only safety
-- Strong password (12+ chars minimum; longer recommended)
-- Avoid changing host binding to public interfaces.
-
 Start Joblio
 
 ```sh
@@ -70,9 +91,7 @@ npm start
 
 ## Usage
 
-After installation, use the same startup command from [Getting Started](#getting-started):
-
-- `npm start`
+After installation, use the same startup command `npm start`
 
 `npm start` will:
 
@@ -101,6 +120,7 @@ Files:
 
 - `Dockerfile`
 - `docker-compose.yml`
+- `.dockerignore`
 
 First-time container setup:
 
@@ -112,10 +132,10 @@ docker compose run --rm -it joblio npm run setup
 
 Important for Docker setup prompts:
 
-- Host is locked to localhost-only binding.
-- Prefer loopback-only host publishing from Docker (default: `127.0.0.1:8787:8787`) and avoid public exposure.
-- Configure TLS cert/key paths appropriate for containerized paths.
-- If proxying traffic, set `JOBLIO_IP_ALLOWLIST` first and then enable `JOBLIO_TRUST_PROXY=1`.
+- Joblio binds to localhost-only.
+- Docker publish is loopback-only by default (`127.0.0.1:8787:8787`).
+- Configure TLS cert/key paths for container paths during setup.
+- If using a reverse proxy, set `JOBLIO_IP_ALLOWLIST` first, then enable `JOBLIO_TRUST_PROXY=1`.
 
 Start service:
 
@@ -141,12 +161,12 @@ Single-process Node.js app. No external database required.
 
 ### Authentication
 
-- Global Basic Auth (required)
+- Global Basic Auth
 - API session cookie (`joblio_sid`) required for `/api/*`
 - Session cookie attributes:
   - `HttpOnly`
   - `SameSite=Strict`
-  - `Secure` (always enabled)
+  - `Secure`
 
 ### CSRF
 
@@ -225,7 +245,7 @@ These keys are written by setup and used at runtime.
 
 | Key | Default | Purpose |
 | --- | --- | --- |
-| `HOST` | `127.0.0.1` | Bind host |
+| `HOST` | `127.0.0.1` | Bind host (localhost-only enforced) |
 | `PORT` | `8787` | Bind port |
 | `JOBLIO_API_TOKEN` | random | Session signing/encryption secret |
 | `JOBLIO_BASIC_AUTH_USER` | `joblio` | Basic Auth username |
