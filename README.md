@@ -62,16 +62,25 @@ Joblio is intended for local machine use by default. Optional guarded LAN mode c
 ### Security First
 
 - Supported deployment: local machine access by default (loopback/localhost).
-- Supported (advanced): guarded LAN access on private networks with explicit allowlist controls.
+- Supported (advanced): private-LAN access on trusted local networks with explicit allowlist controls.
 - Unsupported deployment: direct public internet exposure.
 - Remote internet exposure is unsupported.
-- LAN mode safety requirements:
-  - set `JOBLIO_ALLOW_LAN=1`
-  - use a specific private interface bind host (no `0.0.0.0` / `::`)
-  - set a non-empty `JOBLIO_IP_ALLOWLIST` with at least one non-loopback entry
-  - keep `JOBLIO_TRUST_PROXY=0` unless you have a deliberate trusted-proxy design
-- If using localhost-only deployment with a trusted reverse proxy and needing real client IP handling:
-  configure `JOBLIO_IP_ALLOWLIST` first, verify it, and only then enable `JOBLIO_TRUST_PROXY=1`.
+
+Deployment modes (choose one):
+
+- Localhost mode (recommended):
+  - Keep `JOBLIO_ALLOW_LAN=0` (default) and `HOST=127.0.0.1`.
+  - Use this mode for single-machine use.
+  - Use this mode for reverse proxy deployments.
+  - If using a trusted reverse proxy and needing real client IP handling:
+    configure `JOBLIO_IP_ALLOWLIST` first, verify it, and only then enable `JOBLIO_TRUST_PROXY=1`.
+
+- LAN mode (direct device access, advanced):
+  - Set `JOBLIO_ALLOW_LAN=1`.
+  - Use a specific private interface bind host (no `0.0.0.0` / `::`).
+  - Set a non-empty `JOBLIO_IP_ALLOWLIST` with at least one non-loopback entry.
+  - Keep `JOBLIO_TRUST_PROXY=0`.
+
 - Run `npm run verify` after configuration changes.
 
 ### Installation
@@ -207,8 +216,16 @@ Important for Docker setup prompts:
 - Docker publish is loopback-only by default (`127.0.0.1:8787:8787`).
 - Do not publish container ports to non-loopback/public interfaces.
 - Configure TLS cert/key paths for container paths during setup (or run `npm run tls:gen` first if you are using local cert files).
-- If using localhost-only deployment with a trusted reverse proxy and needing real client IP handling:
-  configure `JOBLIO_IP_ALLOWLIST` first, verify it, and only then enable `JOBLIO_TRUST_PROXY=1`.
+- Docker localhost mode (recommended):
+  - Keep `JOBLIO_ALLOW_LAN=0`.
+  - Keep loopback port publishing (`127.0.0.1:8787:8787`).
+  - If using a trusted reverse proxy and needing real client IP handling:
+    configure `JOBLIO_IP_ALLOWLIST` first, verify it, and only then enable `JOBLIO_TRUST_PROXY=1`.
+- Docker LAN mode (advanced, direct private-LAN access):
+  - Set `JOBLIO_ALLOW_LAN=1`.
+  - Set `HOST` to a specific private interface IP.
+  - Keep `JOBLIO_TRUST_PROXY=0`.
+  - Set `JOBLIO_IP_ALLOWLIST` to allowed local clients/subnets.
 
 Start service:
 
