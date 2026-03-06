@@ -3,6 +3,8 @@
 .joblio-data
 backups
 docker-data
+docker-backups
+node_modules
 README.md
 *.log
 *.tmp
