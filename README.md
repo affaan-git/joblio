@@ -22,7 +22,7 @@ A local, single-user job application tracker built to support my job search.
 - [Connection Model](#connection-model)
 - [Technical Reference](#technical-reference)
 - [Scope and Non-Goals (for now)](#scope-and-non-goals-for-now)
-- [Troubleshooting](#troubleshooting-1)
+- [Troubleshooting](#troubleshooting)
 
 ## What Joblio Does
 
@@ -59,7 +59,7 @@ Then open the HTTPS URL printed in your terminal and sign in with your configure
 - Supported deployment: local machine or private local network access only.
 - Unsupported deployment: direct public internet exposure.
 - If you need remote access, use a private reverse proxy/VPN design and keep Joblio bound to localhost.
-- If you use a reverse proxy and need real client IP handling:
+- If using a reverse proxy and needing real client IP handling:
   configure `JOBLIO_IP_ALLOWLIST` first, verify it, and only then enable `JOBLIO_TRUST_PROXY=1`.
 
 ### Installation
@@ -83,15 +83,9 @@ Start setup
 npm run setup
 ```
 
-Start Joblio
-
-```sh
-npm start
-```
-
 ## Usage
 
-After installation, use the same startup command `npm start`
+After completing setup from [Installation](#installation), run Joblio with `npm start`, then open the HTTPS URL printed in your terminal and sign in with your configured Basic Auth credentials.
 
 `npm start` will:
 
@@ -135,7 +129,8 @@ Important for Docker setup prompts:
 - Joblio binds to localhost-only.
 - Docker publish is loopback-only by default (`127.0.0.1:8787:8787`).
 - Configure TLS cert/key paths for container paths during setup.
-- If using a reverse proxy, set `JOBLIO_IP_ALLOWLIST` first, then enable `JOBLIO_TRUST_PROXY=1`.
+- If using a reverse proxy and needing real client IP handling:
+  configure `JOBLIO_IP_ALLOWLIST` first, verify it, and only then enable `JOBLIO_TRUST_PROXY=1`.
 
 Start service:
 
@@ -387,8 +382,10 @@ Validation/ops:
 - No external identity provider integration
 - No cloud-managed deployment stack included
 
+## Troubleshooting
+
 <details>
-  <summary><strong>Troubleshooting</strong></summary>
+  <summary>Click to expand</summary>
 
 ### Setup requires interactive terminal (TTY)
 

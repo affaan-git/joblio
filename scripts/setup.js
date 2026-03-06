@@ -64,6 +64,21 @@ function sanitizeValue(v) {
   return String(v || '').replace(/\r/g, '').replace(/\n/g, '');
 }
 
+function validatePasswordStrength(pass) {
+  if (pass.length < 8) {
+    throw new Error('Password must be at least 8 characters.');
+  }
+  if (!/[A-Za-z]/.test(pass)) {
+    throw new Error('Password must include at least one letter.');
+  }
+  if (!/\d/.test(pass)) {
+    throw new Error('Password must include at least one number.');
+  }
+  if (!/[^A-Za-z0-9]/.test(pass)) {
+    throw new Error('Password must include at least one symbol.');
+  }
+}
+
 async function promptHidden(promptText) {
   if (!stdin.isTTY || !stdout.isTTY) {
     throw new Error('Interactive setup requires a TTY terminal.');
@@ -123,7 +138,7 @@ async function askInteractive(existing, options = {}) {
     const hasExistingHash = String(existing.JOBLIO_BASIC_AUTH_HASH || '').startsWith('scrypt$');
     const passLabel = hasExistingHash
       ? 'Basic auth password (leave blank to keep existing): '
-      : 'Basic auth password (min 12 chars): ';
+      : 'Basic auth password (min 8 chars, include letter + number + symbol): ';
     const pass = await promptHidden(passLabel);
     let useExistingHash = false;
     if (!pass && hasExistingHash) {
@@ -134,7 +149,7 @@ async function askInteractive(existing, options = {}) {
     if (!useExistingHash) {
       const pass2 = await promptHidden('Confirm password: ');
       if (pass !== pass2) throw new Error('Password confirmation did not match.');
-      if (pass.length < 12) throw new Error('Password must be at least 12 characters.');
+      validatePasswordStrength(pass);
       passwordHash = createPasswordHash(pass);
     }
 
