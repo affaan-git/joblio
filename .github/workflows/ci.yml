@@ -31,6 +31,9 @@ jobs:
       - name: Run security unit tests
         run: npm run test:security
 
+      - name: Audit runtime dependencies
+        run: npm run deps:audit
+
   integration:
     runs-on: ubuntu-latest
     needs: unit-static
