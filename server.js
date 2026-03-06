@@ -15,6 +15,7 @@ const PORT = Number(process.env.PORT || 8787);
 const TLS_CERT_PATH = process.env.JOBLIO_TLS_CERT_PATH || '';
 const TLS_KEY_PATH = process.env.JOBLIO_TLS_KEY_PATH || '';
 const ROOT_DIR = __dirname;
+const ASSETS_DIR = path.join(ROOT_DIR, 'assets');
 const DATA_DIR = path.resolve(process.env.JOBLIO_DATA_DIR || path.join(ROOT_DIR, '.joblio-data'));
 const TEMPLATE_DIR = path.join(ROOT_DIR, 'templates');
 const STORAGE_DIR = path.join(DATA_DIR, 'storage');
@@ -731,7 +732,11 @@ function parseCookies(req) {
     const key = part.slice(0, idx).trim();
     const value = part.slice(idx + 1).trim();
     if (!key) return;
-    out[key] = decodeURIComponent(value);
+    try {
+      out[key] = decodeURIComponent(value);
+    } catch {
+      out[key] = value;
+    }
   });
   return out;
 }
@@ -973,7 +978,11 @@ async function findStoredFilePath(appId, fileId) {
   try {
     const files = await fsp.readdir(dir);
     const found = files.find((name) => name.startsWith(`${fileId}-`));
-    return found ? filePathInDir(dir, found) : null;
+    if (!found) return null;
+    const full = filePathInDir(dir, found);
+    const stat = await fsp.lstat(full);
+    if (!stat.isFile() || stat.isSymbolicLink()) return null;
+    return full;
   } catch {
     return null;
   }
@@ -994,7 +1003,11 @@ async function findTrashedFilePath(appId, fileId) {
   try {
     const files = await fsp.readdir(TRASH_STORAGE_DIR_ABS);
     const found = files.find((name) => name.startsWith(prefix));
-    return found ? filePathInDir(TRASH_STORAGE_DIR_ABS, found) : null;
+    if (!found) return null;
+    const full = filePathInDir(TRASH_STORAGE_DIR_ABS, found);
+    const stat = await fsp.lstat(full);
+    if (!stat.isFile() || stat.isSymbolicLink()) return null;
+    return full;
   } catch {
     return null;
   }
@@ -1348,6 +1361,53 @@ async function handleApi(req, res, url) {
 async function serveStatic(req, res, url) {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     return notFound(res);
+  }
+  if (url.pathname.startsWith('/assets/')) {
+    const relPath = url.pathname.replace(/^\/assets\//, '');
+    let decoded = '';
+    try {
+      decoded = decodeURIComponent(relPath || '');
+    } catch {
+      return notFound(res);
+    }
+    const assetPath = path.resolve(path.join(ASSETS_DIR, decoded));
+    const assetsRoot = path.resolve(ASSETS_DIR);
+    if (!(assetPath === assetsRoot || assetPath.startsWith(`${assetsRoot}${path.sep}`))) {
+      return notFound(res);
+    }
+    if (!fs.existsSync(assetPath)) {
+      return notFound(res);
+    }
+    const stat = await fsp.stat(assetPath);
+    if (!stat.isFile()) {
+      return notFound(res);
+    }
+    const ext = path.extname(assetPath).toLowerCase();
+    const mimeMap = {
+      '.css': 'text/css; charset=utf-8',
+      '.js': 'application/javascript; charset=utf-8',
+      '.svg': 'image/svg+xml',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.ico': 'image/x-icon',
+      '.json': 'application/json; charset=utf-8',
+      '.txt': 'text/plain; charset=utf-8',
+    };
+    applySecurityHeaders(res);
+    res.writeHead(200, {
+      'Content-Type': mimeMap[ext] || 'application/octet-stream',
+      'Content-Length': stat.size,
+      'Cache-Control': 'no-store',
+    });
+    if (req.method === 'HEAD') {
+      res.end();
+      return;
+    }
+    fs.createReadStream(assetPath).pipe(res);
+    return;
   }
   if (url.pathname === '/' || url.pathname === '/Joblio.html') {
     const nonce = crypto.randomBytes(18).toString('base64');

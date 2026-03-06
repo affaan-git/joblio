@@ -5,6 +5,7 @@ backups
 docker-data
 docker-backups
 node_modules
+assets/js/joblio.bundle.js
 README.md
 *.log
 *.tmp

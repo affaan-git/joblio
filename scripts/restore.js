@@ -102,6 +102,24 @@ async function replaceDirAtomic(targetDir, extractedDir) {
   }
 }
 
+async function assertNoSymlinks(rootDir, topDirName) {
+  const stack = [rootDir];
+  while (stack.length) {
+    const current = stack.pop();
+    const entries = await fsp.readdir(current, { withFileTypes: true });
+    for (const entry of entries) {
+      const full = path.join(current, entry.name);
+      if (entry.isSymbolicLink()) {
+        const rel = path.relative(rootDir, full).replace(/\\/g, '/');
+        throw new Error(`Archive contains unsupported symbolic link: ${topDirName}/${rel}`);
+      }
+      if (entry.isDirectory()) {
+        stack.push(full);
+      }
+    }
+  }
+}
+
 function usage() {
   // eslint-disable-next-line no-console
   console.log('Usage: node ./scripts/restore.js --file <backup-file> --yes');
@@ -146,6 +164,7 @@ async function main() {
       if (!fs.existsSync(extractedDir) || !fs.statSync(extractedDir).isDirectory()) {
         throw new Error(`Restore archive missing expected top-level directory: ${topDir}`);
       }
+      await assertNoSymlinks(extractedDir, topDir);
       await replaceDirAtomic(dataDir, extractedDir);
       // eslint-disable-next-line no-console
       console.log('Restore complete from zip backup.');
@@ -160,6 +179,7 @@ async function main() {
       if (!fs.existsSync(extractedDir) || !fs.statSync(extractedDir).isDirectory()) {
         throw new Error(`Restore archive missing expected top-level directory: ${topDir}`);
       }
+      await assertNoSymlinks(extractedDir, topDir);
       await replaceDirAtomic(dataDir, extractedDir);
       // eslint-disable-next-line no-console
       console.log('Restore complete from tar backup.');
@@ -181,6 +201,7 @@ if (require.main === module) {
 module.exports = {
   isSafeArchiveEntry,
   validateEntries,
+  assertNoSymlinks,
   parseEnvText,
   loadConfigEnv,
   main,

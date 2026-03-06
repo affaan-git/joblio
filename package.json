@@ -4,7 +4,10 @@
   "private": true,
   "description": "Joblio local tracker backend + UI",
   "scripts": {
+    "build": "npm run build:frontend",
+    "build:frontend": "node ./scripts/build-frontend-bundle.js",
     "preflight": "node ./scripts/preflight.js",
+    "security": "npm run security:check && npm run test:security",
     "security:check": "node ./scripts/security-check.js",
     "setup": "node ./scripts/setup.js",
     "reconfigure": "node ./scripts/setup.js --reconfigure",

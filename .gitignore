@@ -1,3 +1,4 @@
 .joblio-data/
 backups/
 .DS_Store
+assets/js/joblio.bundle.js

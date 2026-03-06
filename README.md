@@ -17,6 +17,7 @@ A local, single-user job application tracker built to support my job search.
 - [Getting Started](#getting-started)
 - [Usage](#usage)
 - [Reconfiguration](#reconfiguration)
+- [Development](#development)
 - [Docker support](#docker-support)
 - [Architecture](#architecture)
 - [Connection Model](#connection-model)
@@ -47,6 +48,8 @@ Issues during setup? Jump to [Troubleshooting](#troubleshooting).
 ```sh
 git clone https://github.com/affaan-git/joblio.git
 cd joblio
+npm install
+npm run build
 npm run tls:gen
 npm run setup
 npm start
@@ -56,11 +59,12 @@ Then open the HTTPS URL printed in your terminal and sign in with your configure
 
 ### Security First
 
-- Supported deployment: local machine or private local network access only.
+- Supported deployment: local machine access only (loopback/localhost).
 - Unsupported deployment: direct public internet exposure.
 - If you need remote access, use a private reverse proxy/VPN design and keep Joblio bound to localhost.
 - If using a reverse proxy and needing real client IP handling:
   configure `JOBLIO_IP_ALLOWLIST` first, verify it, and only then enable `JOBLIO_TRUST_PROXY=1`.
+- Run [Reconfiguration](#reconfiguration) tests after config changes
 
 ### Installation
 
@@ -69,6 +73,18 @@ Clone the repository
 ```sh
 git clone https://github.com/affaan-git/joblio.git
 cd joblio
+```
+
+Install dependencies
+
+```sh
+npm install
+```
+
+Build project
+
+```sh
+npm run build
 ```
 
 Create TLS cert/key paths
@@ -90,6 +106,7 @@ After completing setup from [Installation](#installation), run Joblio with `npm 
 `npm start` will:
 
 - Load `.joblio-data/config.env`
+- Build the frontend runtime bundle (`assets/js/joblio.bundle.js`)
 - Run preflight validation
 - Start backend server
 
@@ -105,8 +122,29 @@ npm run validate:release
 
 - Run `npm run reconfigure` to edit an existing configuration directly.
 - Run `npm run setup` if you want the same setup flow with update prompt behavior.
+- After config changes, run the post-reconfigure checklist:
+  - `npm run preflight`
+  - `npm run security`
+  - `npm run validate:release`
+  - `npm start`
 
-> Recommended: run `npm run validate:release` from [Usage](#usage) after config changes.
+## Development
+
+For day-to-day development:
+
+`npm run build` to regenerate the frontend runtime bundle (`assets/js/joblio.bundle.js`) from modular source files.
+
+Generated build artifacts:
+
+- `assets/js/joblio.bundle.js` is generated from source modules.
+- It is intentionally ignored by Git and Docker context files.
+- Rebuild with `npm run build` (or run `npm start`, which builds before launch).
+
+Validation security tests:
+
+- `npm run security`
+- `npm run test:security`
+- `npm run validate:release`
 
 ## Docker support
 
@@ -128,7 +166,7 @@ Important for Docker setup prompts:
 
 - Joblio binds to localhost-only.
 - Docker publish is loopback-only by default (`127.0.0.1:8787:8787`).
-- Configure TLS cert/key paths for container paths during setup.
+- Configure TLS cert/key paths for container paths during setup (or run `npm run tls:gen` first if you are using local cert files).
 - If using a reverse proxy and needing real client IP handling:
   configure `JOBLIO_IP_ALLOWLIST` first, verify it, and only then enable `JOBLIO_TRUST_PROXY=1`.
 
@@ -145,7 +183,13 @@ Persistent defaults:
 
 ## Architecture
 
-- JavaScript Frontend: `Joblio.html`
+- Frontend markup: `Joblio.html`
+- Frontend styles: `assets/css/joblio.css`
+- Frontend scripts:
+  - Runtime entry: `assets/js/joblio.bundle.js`
+  - Source entry: `assets/js/app.js`
+  - Core orchestrator: `assets/js/modules/joblio-core.js`
+  - Modules: `assets/js/modules/constants.js`, `dom.js`, `time.js`, `text.js`, `search-filters.js`, `trash.js`, `status-dialog.js`
 - Node.js Backend: `server.js` (serves UI and API)
 - JavaScript Scripts: `scripts/`
 - Data directory: `.joblio-data/`
@@ -352,6 +396,7 @@ Core:
 
 Validation/ops:
 
+- `npm run security`
 - `npm run preflight`
 - `npm run security:check`
 - `npm run test:security`
@@ -374,6 +419,17 @@ Validation/ops:
 - `scripts/backup.js` - data backup
 - `scripts/restore.js` - data restore
 - `scripts/validate-release.js` - release gate runner
+
+Command usage guidance:
+
+- Normal users:
+  - `npm run setup` (first-time)
+  - After `npm run reconfigure`, follow [Reconfiguration](#reconfiguration)
+  - `npm start`
+- Developers/maintainers:
+  - `npm run build` after frontend module changes
+  - `npm run security` before commit/release
+  - `npm run validate:release` for full release-gate validation
 
 ## Scope and Non-Goals (for now)
 
@@ -405,6 +461,7 @@ Validation/ops:
 - Fix:
   - Generate local certs: `npm run tls:gen`
   - Re-run config and set correct paths: `npm run reconfigure`
+  - Run the post-change checklist in [Reconfiguration](#reconfiguration) before restart
 
 ### Login failures or temporary lockout
 
