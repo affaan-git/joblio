@@ -10,7 +10,19 @@
 <body>
   <header class="top-bar">
     <div class="brand">
-      <div class="brand-icon">JL</div>
+      <svg class="brand-icon" viewBox="0 0 96 96" role="img" aria-label="Joblio logo">
+        <defs>
+          <linearGradient id="brandIconBg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="var(--brand-icon-bg-start)" />
+            <stop offset="100%" stop-color="var(--brand-icon-bg-end)" />
+          </linearGradient>
+        </defs>
+        <rect x="4" y="4" width="88" height="88" rx="24" fill="url(#brandIconBg)" />
+        <text x="48" y="62" text-anchor="middle" fill="var(--brand-icon-fg)"
+          font-size="46" font-weight="700"
+          font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif"
+          letter-spacing="0.5">JL</text>
+      </svg>
       <span>Joblio</span>
     </div>
 

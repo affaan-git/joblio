@@ -12,6 +12,9 @@
       --warn: #f59e0b;
       --danger: #ef4444;
       --info: #38bdf8;
+      --brand-icon-bg-start: #1f2937;
+      --brand-icon-bg-end: #334155;
+      --brand-icon-fg: #fbbf24;
       --radius-sm: 8px;
       --radius-md: 12px;
     }
@@ -30,6 +33,9 @@
       --warn: #d97706;
       --danger: #dc2626;
       --info: #0284c7;
+      --brand-icon-bg-start: #dbe4f2;
+      --brand-icon-bg-end: #eef3fb;
+      --brand-icon-fg: #1f2937;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -70,16 +76,8 @@
       width: 28px;
       height: 28px;
       border-radius: 8px;
-      display: grid;
-      place-items: center;
-      background: linear-gradient(135deg, #1f2937, #334155);
-      color: #fbbf24;
-      font-size: 0.8rem;
-    }
-
-    body.theme-light .brand-icon {
-      background: linear-gradient(135deg, #e2e8f0, #f1f5f9);
-      color: #b45309;
+      display: block;
+      object-fit: cover;
     }
 
     .center-controls {

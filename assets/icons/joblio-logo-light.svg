@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Joblio logo light">
+  <defs>
+    <linearGradient id="joblioLightBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#dbe4f2"/>
+      <stop offset="100%" stop-color="#eef3fb"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="88" height="88" rx="24" fill="url(#joblioLightBg)"/>
+  <text x="48" y="62" text-anchor="middle" fill="#1f2937"
+    font-size="46" font-weight="700"
+    font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif"
+    letter-spacing="0.5">JL</text>
+</svg>
