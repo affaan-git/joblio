@@ -16,17 +16,37 @@ const parts = [
   'assets/js/modules/joblio-core.js',
 ];
 
-let out = '';
-for (const rel of parts) {
-  const file = path.join(root, rel);
-  let src = fs.readFileSync(file, 'utf8');
-  src = src.replace(/^import\s+[^;]+;\n/gm, '');
-  src = src.replace(/^export\s+/gm, '');
-  out += `\n/* ${rel} */\n${src}\n`;
+function buildBundleContent() {
+  let out = '';
+  for (const rel of parts) {
+    const file = path.join(root, rel);
+    let src = fs.readFileSync(file, 'utf8');
+    src = src.replace(/^import\s+[^;]+;\n/gm, '');
+    src = src.replace(/^export\s+/gm, '');
+    out += `\n/* ${rel} */\n${src}\n`;
+  }
+  out += '\ninitJoblio();\n';
+  return out;
 }
-out += '\ninitJoblio();\n';
 
-const bundlePath = path.join(root, 'assets/js/joblio.bundle.js');
-fs.writeFileSync(bundlePath, out, 'utf8');
-// eslint-disable-next-line no-console
-console.log(`Built ${path.relative(root, bundlePath)} (${out.length} bytes)`);
+function getBundlePath() {
+  return path.join(root, 'assets/js/joblio.bundle.js');
+}
+
+function writeBundle() {
+  const out = buildBundleContent();
+  const bundlePath = getBundlePath();
+  fs.writeFileSync(bundlePath, out, 'utf8');
+  // eslint-disable-next-line no-console
+  console.log(`Built ${path.relative(root, bundlePath)} (${out.length} bytes)`);
+}
+
+if (require.main === module) {
+  writeBundle();
+}
+
+module.exports = {
+  buildBundleContent,
+  getBundlePath,
+  writeBundle,
+};

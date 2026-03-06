@@ -3,25 +3,10 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { parseEnvText } = require('../lib/env-file');
 
 const root = path.resolve(__dirname, '..');
 const configPath = path.join(root, '.joblio-data', 'config.env');
-
-function parseEnvText(text) {
-  const out = {};
-  const lines = String(text || '').split(/\r?\n/);
-  for (const line of lines) {
-    const t = line.trim();
-    if (!t || t.startsWith('#')) continue;
-    const idx = t.indexOf('=');
-    if (idx < 1) continue;
-    const key = t.slice(0, idx).trim();
-    const value = t.slice(idx + 1).trim();
-    if (!key) continue;
-    out[key] = value;
-  }
-  return out;
-}
 
 function fail(msg) {
   // eslint-disable-next-line no-console

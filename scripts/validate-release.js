@@ -6,6 +6,7 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 const steps = [
+  { name: 'build:frontend:check', cmd: 'npm', args: ['run', 'build:frontend:check'] },
   { name: 'preflight', cmd: 'npm', args: ['run', 'preflight'] },
   { name: 'security:check', cmd: 'npm', args: ['run', 'security:check'] },
   { name: 'test:security', cmd: 'npm', args: ['run', 'test:security'] },

@@ -9,6 +9,7 @@ const { spawnSync } = require('node:child_process');
 const readline = require('node:readline/promises');
 const { stdin, stdout } = require('node:process');
 const { createPasswordHash } = require('../lib/auth');
+const { parseEnvText } = require('../lib/env-file');
 
 const root = path.resolve(__dirname, '..');
 const dataDir = path.join(root, '.joblio-data');
@@ -34,22 +35,6 @@ function parseIntInRange(v, fallback, min, max) {
   if (!Number.isFinite(n) || !Number.isInteger(n)) return fallback;
   if (n < min || n > max) return fallback;
   return n;
-}
-
-function parseEnvText(text) {
-  const out = {};
-  const lines = String(text || '').split(/\r?\n/);
-  for (const line of lines) {
-    const t = line.trim();
-    if (!t || t.startsWith('#')) continue;
-    const idx = t.indexOf('=');
-    if (idx < 1) continue;
-    const key = t.slice(0, idx).trim();
-    const value = t.slice(idx + 1).trim();
-    if (!key) continue;
-    out[key] = value;
-  }
-  return out;
 }
 
 async function loadExistingConfig() {

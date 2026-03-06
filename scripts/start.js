@@ -5,30 +5,14 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { readEnvFile } = require('../lib/env-file');
 
 const root = path.resolve(__dirname, '..');
 const configDir = path.join(root, '.joblio-data');
 const configPath = path.join(configDir, 'config.env');
 
-function parseEnvText(text) {
-  const out = {};
-  const lines = String(text || '').split(/\r?\n/);
-  for (const line of lines) {
-    const t = line.trim();
-    if (!t || t.startsWith('#')) continue;
-    const idx = t.indexOf('=');
-    if (idx < 1) continue;
-    const key = t.slice(0, idx).trim();
-    const value = t.slice(idx + 1).trim();
-    if (!key) continue;
-    out[key] = value;
-  }
-  return out;
-}
-
 async function loadConfigEnv() {
-  const raw = await fsp.readFile(configPath, 'utf8');
-  return parseEnvText(raw);
+  return readEnvFile(configPath);
 }
 
 function runWithEnv(cmd, args, env) {

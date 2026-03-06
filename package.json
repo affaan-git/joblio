@@ -6,6 +6,7 @@
   "scripts": {
     "build": "npm run build:frontend",
     "build:frontend": "node ./scripts/build-frontend-bundle.js",
+    "build:frontend:check": "node ./scripts/check-frontend-bundle.js",
     "preflight": "node ./scripts/preflight.js",
     "security": "npm run security:check && npm run test:security",
     "security:check": "node ./scripts/security-check.js",

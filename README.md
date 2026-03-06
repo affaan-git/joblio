@@ -16,6 +16,7 @@ A local, single-user job application tracker built to support my job search.
 - [What Joblio Does](#what-joblio-does)
 - [Getting Started](#getting-started)
 - [Usage](#usage)
+- [Recommended Flows](#recommended-flows)
 - [Reconfiguration](#reconfiguration)
 - [Development](#development)
 - [Docker support](#docker-support)
@@ -117,6 +118,28 @@ Recommended after setup or major changes:
 npm run validate:release
 ```
 
+## Recommended Flows
+
+First-time setup and run:
+
+```sh
+npm install
+npm run build
+npm run tls:gen
+npm run setup
+npm start
+```
+
+After configuration changes:
+
+```sh
+npm run reconfigure
+npm run security
+npm run validate:release
+npm run build   # if frontend source changed
+npm start
+```
+
 ## Reconfiguration
 
 - Run `npm run reconfigure` to edit an existing configuration directly.
@@ -124,11 +147,7 @@ npm run validate:release
 - `npm run setup` and `npm run reconfigure` automatically run:
   - `preflight`
   - `security-check`
-- After config changes, run the post-reconfigure checklist:
-  - `npm run security`
-  - `npm run validate:release`
-  - `npm run build` (if frontend source changed)
-  - `npm start`
+- After config changes, follow [Recommended Flows](#recommended-flows).
 
 ## Development
 
@@ -402,6 +421,7 @@ Validation/ops:
 - `npm run preflight`
 - `npm run security:check`
 - `npm run test:security`
+- `npm run build:frontend:check`
 - `npm run smoke`
 - `npm run validate:release`
 - `npm run backup`
@@ -416,6 +436,7 @@ Validation/ops:
 - `scripts/security-check.js` - config and security posture checks
 - `scripts/gen-local-tls.js` - local TLS cert generation helper
 - `scripts/security-tests.js` - auth/hash unit tests
+- `scripts/check-frontend-bundle.js` - verifies generated frontend bundle is up to date
 - `scripts/restore-tests.js` - restore archive path-safety tests
 - `scripts/smoke-test.js` - integration checks
 - `scripts/backup.js` - data backup
