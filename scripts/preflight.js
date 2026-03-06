@@ -3,12 +3,14 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { parseAllowlist } = require('../lib/ip-allowlist');
+const { parseAllowlist, isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('../lib/ip-allowlist');
+const { isLoopbackHost, isWildcardHost, isPrivateOrLoopbackHost } = require('../lib/network-policy');
 
 const root = path.resolve(__dirname, '..');
 
 function evaluatePreflight(env = process.env) {
   const host = env.HOST || '127.0.0.1';
+  const allowLan = env.JOBLIO_ALLOW_LAN === '1';
   const token = env.JOBLIO_API_TOKEN || '';
   const basicUser = env.JOBLIO_BASIC_AUTH_USER || '';
   const basicHash = env.JOBLIO_BASIC_AUTH_HASH || '';
@@ -30,9 +32,12 @@ function evaluatePreflight(env = process.env) {
   const issues = [];
   const warns = [];
 
-  const localhostHosts = new Set(['127.0.0.1', 'localhost', '::1']);
-  if (!localhostHosts.has(String(host).trim().toLowerCase())) {
-    issues.push(`HOST=${host} is not local. Use HOST=127.0.0.1.`);
+  if (!allowLan && !isLoopbackHost(host)) {
+    issues.push(`HOST=${host} is not local while JOBLIO_ALLOW_LAN=0. Use HOST=127.0.0.1 or enable JOBLIO_ALLOW_LAN=1.`);
+  }
+  if (allowLan) {
+    if (isWildcardHost(host)) issues.push(`HOST=${host} is wildcard. Use a specific private interface IP in LAN mode.`);
+    if (!isPrivateOrLoopbackHost(host)) issues.push(`HOST=${host} is not private/loopback. LAN mode requires a private bind host.`);
   }
 
   if (!token) issues.push('JOBLIO_API_TOKEN is required.');
@@ -56,11 +61,26 @@ function evaluatePreflight(env = process.env) {
   if (ipAllowlistRaw.trim() && !parsedAllowlist.length) {
     issues.push('JOBLIO_IP_ALLOWLIST is set but contains no valid entries.');
   }
-  if (parsedAllowlist.length && !trustProxy) {
+  if (!allowLan && parsedAllowlist.length && !trustProxy) {
     warns.push('JOBLIO_IP_ALLOWLIST is enabled while JOBLIO_TRUST_PROXY=0. Only socket remoteAddress will be used for IP checks.');
   }
   if (trustProxy && !parsedAllowlist.length) {
     issues.push('JOBLIO_TRUST_PROXY=1 requires a non-empty JOBLIO_IP_ALLOWLIST.');
+  }
+  if (allowLan && !parsedAllowlist.length) {
+    issues.push('JOBLIO_ALLOW_LAN=1 requires a non-empty JOBLIO_IP_ALLOWLIST.');
+  }
+  if (allowLan && parsedAllowlist.length && !hasNonLoopbackAllowlistEntry(parsedAllowlist)) {
+    issues.push('JOBLIO_ALLOW_LAN=1 requires at least one non-loopback JOBLIO_IP_ALLOWLIST entry.');
+  }
+  if (allowLan && trustProxy) {
+    issues.push('JOBLIO_ALLOW_LAN=1 requires JOBLIO_TRUST_PROXY=0 unless you intentionally redesign for a trusted proxy chain.');
+  }
+  if (allowLan) {
+    const unsafe = parsedAllowlist.find((entry) => !isSafeAllowlistEntry(entry));
+    if (unsafe) {
+      issues.push(`Unsafe allowlist entry for LAN mode: ${unsafe}`);
+    }
   }
 
   try {

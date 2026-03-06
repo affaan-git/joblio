@@ -5,7 +5,7 @@ A local, single-user job application tracker built to support my job search.
 ![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js)
 ![JavaScript](https://img.shields.io/badge/JavaScript-ES6%2B-F7DF1E?logo=javascript)
 
-> WARNING: Joblio is built as local-only software.
+> WARNING: Joblio is built for local/private network use.
 > Do not expose it directly to the internet or public interfaces.
 > Internet/public deployment is outside supported security scope.
 
@@ -57,15 +57,20 @@ npm start
 ```
 
 Then open the HTTPS URL printed in your terminal and sign in with your configured Basic Auth credentials.
-Joblio is intended for local machine use only.
+Joblio is intended for local machine use by default. Optional guarded LAN mode can be enabled during setup.
 
 ### Security First
 
-- Supported deployment: local machine access only (loopback/localhost).
+- Supported deployment: local machine access by default (loopback/localhost).
+- Supported (advanced): guarded LAN access on private networks with explicit allowlist controls.
 - Unsupported deployment: direct public internet exposure.
-- Remote access is unsupported.
-- If you use private network access anyway, keep Joblio bound to localhost and place a tightly controlled private reverse proxy/VPN in front.
-- If using a reverse proxy and needing real client IP handling:
+- Remote internet exposure is unsupported.
+- LAN mode safety requirements:
+  - set `JOBLIO_ALLOW_LAN=1`
+  - use a specific private interface bind host (no `0.0.0.0` / `::`)
+  - set a non-empty `JOBLIO_IP_ALLOWLIST` with at least one non-loopback entry
+  - keep `JOBLIO_TRUST_PROXY=0` unless you have a deliberate trusted-proxy design
+- If using localhost-only deployment with a trusted reverse proxy and needing real client IP handling:
   configure `JOBLIO_IP_ALLOWLIST` first, verify it, and only then enable `JOBLIO_TRUST_PROXY=1`.
 - Run `npm run verify` after configuration changes.
 
@@ -198,11 +203,11 @@ docker compose run --rm -it joblio npm run setup
 
 Important for Docker setup prompts:
 
-- Joblio binds to localhost-only.
+- Joblio binds to localhost-only by default.
 - Docker publish is loopback-only by default (`127.0.0.1:8787:8787`).
 - Do not publish container ports to non-loopback/public interfaces.
 - Configure TLS cert/key paths for container paths during setup (or run `npm run tls:gen` first if you are using local cert files).
-- If using a reverse proxy and needing real client IP handling:
+- If using localhost-only deployment with a trusted reverse proxy and needing real client IP handling:
   configure `JOBLIO_IP_ALLOWLIST` first, verify it, and only then enable `JOBLIO_TRUST_PROXY=1`.
 
 Start service:
@@ -271,7 +276,7 @@ Single-process Node.js app. No external database required.
 
 ### Network exposure risk
 
-- Joblio is local-only and binds to loopback (`127.0.0.1`).
+- Joblio is local/private-network only and binds to loopback (`127.0.0.1`) by default.
 - Exposing Joblio directly to public networks is unsupported and not recommended.
 
 ## Technical Reference
@@ -284,7 +289,9 @@ Setup prompts for:
 
 - Basic Auth username
 - Basic Auth password (8+ chars with letters, numbers, and symbols; hidden; confirmation required)
+- LAN mode toggle (off by default)
 - Port
+- Host bind address (required in LAN mode; private interface IP only)
 - Storage data directory
 - Backup directory
 - TLS cert path
@@ -319,7 +326,8 @@ These keys are written by setup and used at runtime.
 
 | Key | Default | Purpose |
 | --- | --- | --- |
-| `HOST` | `127.0.0.1` | Bind host (localhost-only enforced) |
+| `JOBLIO_ALLOW_LAN` | `0` | Enable guarded LAN mode (`1` = on) |
+| `HOST` | `127.0.0.1` | Bind host (loopback by default; private host required in LAN mode) |
 | `PORT` | `8787` | Bind port |
 | `JOBLIO_API_TOKEN` | random | Session signing/encryption secret |
 | `JOBLIO_BASIC_AUTH_USER` | `joblio` | Basic Auth username |
@@ -372,6 +380,7 @@ These are server-supported keys (advanced operations) that are not currently pro
 | `AUTH_BACKOFF_MAX_MS` | `2000` | Backoff max delay |
 | `AUTH_BACKOFF_START_AFTER` | `2` | Backoff starts after this many failures |
 | `AUTH_GUARD_MAX_ENTRIES` | `20000` | Auth guard entry cap |
+| `JOBLIO_ALLOW_LAN` | `0` | Enable guarded LAN mode |
 | `JOBLIO_TRUST_PROXY` | `0` | Trust `X-Forwarded-For` |
 | `JOBLIO_IP_ALLOWLIST` | empty | Allowed IPs/CIDRs (CSV) |
 | `SESSION_TTL_MS` | `28800000` | Session idle timeout |

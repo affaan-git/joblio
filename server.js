@@ -8,10 +8,12 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { verifyPassword } = require('./lib/auth');
 const { AuthGuard } = require('./lib/auth-guard');
-const { normalizeIp, parseAllowlist, isIpAllowed } = require('./lib/ip-allowlist');
+const { normalizeIp, parseAllowlist, isIpAllowed, isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('./lib/ip-allowlist');
+const { isLoopbackHost, isWildcardHost, isPrivateOrLoopbackHost } = require('./lib/network-policy');
 
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 8787);
+const JOBLIO_ALLOW_LAN = process.env.JOBLIO_ALLOW_LAN === '1';
 const TLS_CERT_PATH = process.env.JOBLIO_TLS_CERT_PATH || '';
 const TLS_KEY_PATH = process.env.JOBLIO_TLS_KEY_PATH || '';
 const ROOT_DIR = __dirname;
@@ -160,10 +162,29 @@ async function rotateLogIfNeeded() {
 }
 
 function validateStartupConfig() {
-  const hostLower = String(HOST || '').trim().toLowerCase();
-  const localhostHosts = new Set(['127.0.0.1', 'localhost', '::1']);
-  if (!localhostHosts.has(hostLower)) {
-    throw new Error('Refusing non-local bind host. Set HOST=127.0.0.1.');
+  if (!JOBLIO_ALLOW_LAN && !isLoopbackHost(HOST)) {
+    throw new Error('Refusing non-local bind host while JOBLIO_ALLOW_LAN=0. Set HOST=127.0.0.1 or enable JOBLIO_ALLOW_LAN=1.');
+  }
+  if (JOBLIO_ALLOW_LAN) {
+    if (isWildcardHost(HOST)) {
+      throw new Error('Refusing wildcard host in LAN mode. Use a specific private interface IP.');
+    }
+    if (!isPrivateOrLoopbackHost(HOST)) {
+      throw new Error(`Refusing non-private host in LAN mode: ${HOST}`);
+    }
+    if (!IP_ALLOWLIST.length) {
+      throw new Error('JOBLIO_ALLOW_LAN=1 requires a non-empty JOBLIO_IP_ALLOWLIST.');
+    }
+    if (!hasNonLoopbackAllowlistEntry(IP_ALLOWLIST)) {
+      throw new Error('JOBLIO_ALLOW_LAN=1 requires at least one non-loopback JOBLIO_IP_ALLOWLIST entry.');
+    }
+    const unsafe = IP_ALLOWLIST.find((entry) => !isSafeAllowlistEntry(entry));
+    if (unsafe) {
+      throw new Error(`Unsafe JOBLIO_IP_ALLOWLIST entry in LAN mode: ${unsafe}`);
+    }
+    if (TRUST_PROXY) {
+      throw new Error('JOBLIO_ALLOW_LAN=1 requires JOBLIO_TRUST_PROXY=0 unless explicitly redesigned for a trusted proxy.');
+    }
   }
   if (!API_TOKEN) {
     throw new Error('JOBLIO_API_TOKEN is required.');

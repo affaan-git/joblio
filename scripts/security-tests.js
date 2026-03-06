@@ -5,7 +5,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createPasswordHash, verifyPassword } = require('../lib/auth');
 const { AuthGuard } = require('../lib/auth-guard');
-const { parseAllowlist, isIpAllowed, normalizeIp } = require('../lib/ip-allowlist');
+const { parseAllowlist, isIpAllowed, normalizeIp, isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('../lib/ip-allowlist');
+const { isLoopbackHost, isWildcardHost, isPrivateOrLoopbackHost } = require('../lib/network-policy');
 
 test('password hash verify success/failure', () => {
   const hash = createPasswordHash('S3curePass!123');
@@ -79,4 +80,26 @@ test('allowlist supports exact ip and ipv4 cidr', () => {
 test('ip normalization handles ipv6-mapped ipv4 and xff style input', () => {
   assert.equal(normalizeIp('::ffff:127.0.0.1'), '127.0.0.1');
   assert.equal(normalizeIp('127.0.0.1, 10.0.0.2'), '127.0.0.1');
+});
+
+test('safe allowlist entries reject public and wildcard ranges', () => {
+  assert.equal(isSafeAllowlistEntry('192.168.1.0/24'), true);
+  assert.equal(isSafeAllowlistEntry('10.0.0.5'), true);
+  assert.equal(isSafeAllowlistEntry('8.8.8.8'), false);
+  assert.equal(isSafeAllowlistEntry('0.0.0.0/0'), false);
+  assert.equal(isSafeAllowlistEntry('::/0'), false);
+});
+
+test('lan mode requires non-loopback allowlist entries', () => {
+  assert.equal(hasNonLoopbackAllowlistEntry(parseAllowlist('localhost,127.0.0.1')), false);
+  assert.equal(hasNonLoopbackAllowlistEntry(parseAllowlist('192.168.1.0/24')), true);
+  assert.equal(hasNonLoopbackAllowlistEntry(parseAllowlist('10.1.2.3')), true);
+});
+
+test('network policy enforces private LAN host rules', () => {
+  assert.equal(isLoopbackHost('127.0.0.1'), true);
+  assert.equal(isWildcardHost('0.0.0.0'), true);
+  assert.equal(isPrivateOrLoopbackHost('192.168.1.10'), true);
+  assert.equal(isPrivateOrLoopbackHost('10.10.0.8'), true);
+  assert.equal(isPrivateOrLoopbackHost('8.8.8.8'), false);
 });
