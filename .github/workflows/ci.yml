@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+jobs:
+  unit-static:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build frontend bundle
+        run: npm run build
+
+      - name: Verify frontend bundle is up to date
+        run: npm run build:frontend:check
+
+      - name: Run security unit tests
+        run: npm run test:security
+
+  integration:
+    runs-on: ubuntu-latest
+    needs: unit-static
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build frontend bundle
+        run: npm run build
+
+      - name: Generate local TLS cert/key
+        run: npm run tls:gen
+
+      - name: Create ephemeral CI config
+        shell: bash
+        run: |
+          mkdir -p .joblio-data
+          API_TOKEN="$(openssl rand -hex 32)"
+          AUDIT_KEY="$(openssl rand -hex 32)"
+          HASH="$(node -e "const { createPasswordHash } = require('./lib/auth'); process.stdout.write(createPasswordHash('CI-only-pass1!'));")"
+          cat > .joblio-data/config.env <<EOF
+          HOST=127.0.0.1
+          PORT=8787
+          JOBLIO_API_TOKEN=${API_TOKEN}
+          JOBLIO_BASIC_AUTH_USER=ci
+          JOBLIO_BASIC_AUTH_HASH=${HASH}
+          JOBLIO_AUDIT_KEY=${AUDIT_KEY}
+          JOBLIO_TLS_CERT_PATH=.joblio-data/tls/localhost-cert.pem
+          JOBLIO_TLS_KEY_PATH=.joblio-data/tls/localhost-key.pem
+          JOBLIO_DATA_DIR=.joblio-data
+          JOBLIO_BACKUP_DIR=backups
+          JOBLIO_COOKIE_SECURE=1
+          RATE_MAX_AUTH_SESSION=45
+          AUTH_FAIL_WINDOW_MS=600000
+          AUTH_FAIL_THRESHOLD=5
+          AUTH_LOCKOUT_MS=900000
+          AUTH_BACKOFF_BASE_MS=250
+          AUTH_BACKOFF_MAX_MS=2000
+          AUTH_BACKOFF_START_AFTER=2
+          AUTH_GUARD_MAX_ENTRIES=20000
+          JOBLIO_TRUST_PROXY=0
+          JOBLIO_IP_ALLOWLIST=
+          EOF
+
+      - name: Run preflight
+        run: npm run preflight
+
+      - name: Run security config checks
+        run: npm run security:check

@@ -18,16 +18,18 @@ function warn(msg) {
   console.warn(`WARN: ${msg}`);
 }
 
-function check() {
+function evaluateSecurityCheck(envOverride = null) {
   const issues = [];
   const warns = [];
-  if (!fs.existsSync(configPath)) {
-    issues.push(`Missing config file: ${configPath}`);
-    return { issues, warns };
+  let env = envOverride;
+  if (!env) {
+    if (!fs.existsSync(configPath)) {
+      issues.push(`Missing config file: ${configPath}`);
+      return { issues, warns };
+    }
+    const raw = fs.readFileSync(configPath, 'utf8');
+    env = parseEnvText(raw);
   }
-
-  const raw = fs.readFileSync(configPath, 'utf8');
-  const env = parseEnvText(raw);
   const host = String(env.HOST || '').trim().toLowerCase();
   const localhostHosts = new Set(['127.0.0.1', 'localhost', '::1']);
   if (!localhostHosts.has(host)) {
@@ -64,7 +66,7 @@ function check() {
     issues.push('JOBLIO_TRUST_PROXY=1 requires a non-empty JOBLIO_IP_ALLOWLIST.');
   }
 
-  if (String(process.env.NODE_TLS_REJECT_UNAUTHORIZED || '') === '0') {
+  if (String((envOverride ? env.NODE_TLS_REJECT_UNAUTHORIZED : process.env.NODE_TLS_REJECT_UNAUTHORIZED) || '') === '0') {
     issues.push('NODE_TLS_REJECT_UNAUTHORIZED=0 is unsafe and must not be set.');
   }
 
@@ -87,14 +89,25 @@ function check() {
   return { issues, warns };
 }
 
-const { issues, warns } = check();
-if (!issues.length) {
-  // eslint-disable-next-line no-console
-  console.log('Security check OK');
+function main() {
+  const { issues, warns } = evaluateSecurityCheck();
+  if (!issues.length) {
+    // eslint-disable-next-line no-console
+    console.log('Security check OK');
+    warns.forEach(warn);
+    process.exit(0);
+  }
+
+  issues.forEach(fail);
   warns.forEach(warn);
-  process.exit(0);
+  process.exit(1);
 }
 
-issues.forEach(fail);
-warns.forEach(warn);
-process.exit(1);
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  evaluateSecurityCheck,
+  main,
+};

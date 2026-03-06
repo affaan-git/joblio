@@ -4,7 +4,6 @@
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
 const { readEnvFileSync } = require('../lib/env-file');
 
 const root = path.resolve(__dirname, '..');
@@ -25,43 +24,33 @@ function stamp() {
   return `${yyyy}${mm}${dd}-${hh}${mi}${ss}`;
 }
 
-function runOrThrow(cmd, args) {
-  const result = spawnSync(cmd, args, { cwd: root, stdio: 'inherit' });
-  if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error(`${cmd} failed with code ${result.status}`);
-}
-
-(async () => {
+async function main() {
   const config = loadConfigEnv();
   const dataDir = path.resolve(config.JOBLIO_DATA_DIR || path.join(root, '.joblio-data'));
   const backupDir = path.resolve(config.JOBLIO_BACKUP_DIR || path.join(root, 'backups'));
-  const dataDirName = path.basename(dataDir);
-  if (!fs.existsSync(dataDir)) {
+
+  if (!fs.existsSync(dataDir) || !fs.statSync(dataDir).isDirectory()) {
     // eslint-disable-next-line no-console
     console.error(`No data directory found at ${dataDir}`);
     process.exit(1);
   }
 
   await fsp.mkdir(backupDir, { recursive: true });
-
-  const ts = stamp();
-  if (process.platform === 'win32') {
-    const archive = path.join(backupDir, `joblio-data-${ts}.zip`);
-    const cmd = 'powershell.exe';
-    const ps = [
-      '-NoProfile',
-      '-NonInteractive',
-      '-Command',
-      `Compress-Archive -Path '${dataDir.replace(/'/g, "''")}' -DestinationPath '${archive.replace(/'/g, "''")}' -Force`,
-    ];
-    runOrThrow(cmd, ps);
-    // eslint-disable-next-line no-console
-    console.log(`Backup created: ${archive}`);
-    return;
-  }
-
-  const archive = path.join(backupDir, `joblio-data-${ts}.tar.gz`);
-  runOrThrow('tar', ['-C', path.dirname(dataDir), '-czf', archive, dataDirName]);
+  const outputDir = path.join(backupDir, `joblio-data-${stamp()}`);
+  await fsp.cp(dataDir, outputDir, { recursive: true, force: true });
   // eslint-disable-next-line no-console
-  console.log(`Backup created: ${archive}`);
-})();
+  console.log(`Backup created: ${outputDir}`);
+}
+
+if (require.main === module) {
+  main().catch((err) => {
+    // eslint-disable-next-line no-console
+    console.error(`Backup failed: ${err?.message || String(err)}`);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  loadConfigEnv,
+  main,
+};
