@@ -42,7 +42,7 @@ Issues during setup? Jump to [Troubleshooting](#troubleshooting).
 ### Prerequisites
 
 - [`Node.js 20+`](https://nodejs.org/) ([download](https://nodejs.org/en/download))
-- [`OpenSSL`](https://www.openssl.org/) (required for `npm run tls:gen`)
+- [`OpenSSL`](https://www.openssl.org/) (required only when generating local certs with `npm run tls:gen`; not needed if you already have cert/key files)
 
 ### Quick Start
 
@@ -57,12 +57,14 @@ npm start
 ```
 
 Then open the HTTPS URL printed in your terminal and sign in with your configured Basic Auth credentials.
+Joblio is intended for local machine use only.
 
 ### Security First
 
 - Supported deployment: local machine access only (loopback/localhost).
 - Unsupported deployment: direct public internet exposure.
-- If you need remote access, use a private reverse proxy/VPN design and keep Joblio bound to localhost.
+- Remote access is unsupported.
+- If you use private network access anyway, keep Joblio bound to localhost and place a tightly controlled private reverse proxy/VPN in front.
 - If using a reverse proxy and needing real client IP handling:
   configure `JOBLIO_IP_ALLOWLIST` first, verify it, and only then enable `JOBLIO_TRUST_PROXY=1`.
 - Run `npm run verify` after configuration changes.
@@ -117,6 +119,11 @@ Recommended after setup or major changes:
 ```sh
 npm run verify
 ```
+
+Maintenance reminder:
+
+- Keep Node.js LTS up to date.
+- After updating Node.js, run `npm run verify` before your next `npm start`.
 
 Check levels:
 
@@ -193,6 +200,7 @@ Important for Docker setup prompts:
 
 - Joblio binds to localhost-only.
 - Docker publish is loopback-only by default (`127.0.0.1:8787:8787`).
+- Do not publish container ports to non-loopback/public interfaces.
 - Configure TLS cert/key paths for container paths during setup (or run `npm run tls:gen` first if you are using local cert files).
 - If using a reverse proxy and needing real client IP handling:
   configure `JOBLIO_IP_ALLOWLIST` first, verify it, and only then enable `JOBLIO_TRUST_PROXY=1`.
