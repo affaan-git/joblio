@@ -106,7 +106,6 @@ After completing setup from [Installation](#installation), run Joblio with `npm 
 `npm start` will:
 
 - Load `.joblio-data/config.env`
-- Build the frontend runtime bundle (`assets/js/joblio.bundle.js`)
 - Run preflight validation
 - Start backend server
 
@@ -122,10 +121,13 @@ npm run validate:release
 
 - Run `npm run reconfigure` to edit an existing configuration directly.
 - Run `npm run setup` if you want the same setup flow with update prompt behavior.
+- `npm run setup` and `npm run reconfigure` automatically run:
+  - `preflight`
+  - `security-check`
 - After config changes, run the post-reconfigure checklist:
-  - `npm run preflight`
   - `npm run security`
   - `npm run validate:release`
+  - `npm run build` (if frontend source changed)
   - `npm start`
 
 ## Development
@@ -138,7 +140,7 @@ Generated build artifacts:
 
 - `assets/js/joblio.bundle.js` is generated from source modules.
 - It is intentionally ignored by Git and Docker context files.
-- Rebuild with `npm run build` (or run `npm start`, which builds before launch).
+- Rebuild with `npm run build` before `npm start` when frontend source files change.
 
 Validation security tests:
 

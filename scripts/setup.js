@@ -5,6 +5,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 const readline = require('node:readline/promises');
 const { stdin, stdout } = require('node:process');
 const { createPasswordHash } = require('../lib/auth');
@@ -292,6 +293,49 @@ async function writeConfig(result) {
   await fsp.chmod(configPath, 0o600).catch(() => {});
 }
 
+function buildConfigEnv(result) {
+  return {
+    ...process.env,
+    HOST: sanitizeValue(result.host),
+    PORT: sanitizeValue(result.port),
+    JOBLIO_API_TOKEN: sanitizeValue(result.apiToken),
+    JOBLIO_BASIC_AUTH_USER: sanitizeValue(result.user),
+    JOBLIO_BASIC_AUTH_HASH: sanitizeValue(result.passwordHash),
+    JOBLIO_AUDIT_KEY: sanitizeValue(result.auditKey),
+    JOBLIO_TLS_CERT_PATH: sanitizeValue(result.certPath),
+    JOBLIO_TLS_KEY_PATH: sanitizeValue(result.keyPath),
+    JOBLIO_DATA_DIR: sanitizeValue(result.runtimeDataDir),
+    JOBLIO_BACKUP_DIR: sanitizeValue(result.backupDir),
+    JOBLIO_COOKIE_SECURE: '1',
+    RATE_MAX_AUTH_SESSION: sanitizeValue(result.rateMaxAuthSession),
+    AUTH_FAIL_WINDOW_MS: sanitizeValue(result.authFailWindowMs),
+    AUTH_FAIL_THRESHOLD: sanitizeValue(result.authFailThreshold),
+    AUTH_LOCKOUT_MS: sanitizeValue(result.authLockoutMs),
+    AUTH_BACKOFF_BASE_MS: sanitizeValue(result.authBackoffBaseMs),
+    AUTH_BACKOFF_MAX_MS: sanitizeValue(result.authBackoffMaxMs),
+    AUTH_BACKOFF_START_AFTER: sanitizeValue(result.authBackoffStartAfter),
+    AUTH_GUARD_MAX_ENTRIES: sanitizeValue(result.authGuardMaxEntries),
+    JOBLIO_TRUST_PROXY: sanitizeValue(result.trustProxy),
+    JOBLIO_IP_ALLOWLIST: sanitizeValue(result.ipAllowlist),
+  };
+}
+
+function runValidationStep(name, args, env) {
+  const run = spawnSync(process.execPath, args, { cwd: root, env, stdio: 'inherit' });
+  if (run.error) {
+    throw new Error(`${name} failed: ${run.error.message}`);
+  }
+  if (run.status !== 0) {
+    throw new Error(`${name} failed (exit ${run.status}).`);
+  }
+}
+
+function runPostSetupValidation(result) {
+  const env = buildConfigEnv(result);
+  runValidationStep('preflight', ['./scripts/preflight.js'], env);
+  runValidationStep('security-check', ['./scripts/security-check.js'], env);
+}
+
 async function main() {
   const forceEdit = process.argv.includes('--reconfigure');
   const existing = await loadExistingConfig();
@@ -304,6 +348,8 @@ async function main() {
     process.exit(0);
   }
   await writeConfig(result);
+  console.log('Running post-configuration validation...');
+  runPostSetupValidation(result);
   console.log('Setup complete: configuration saved to .joblio-data/config.env');
 }
 

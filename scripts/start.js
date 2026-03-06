@@ -72,9 +72,6 @@ async function main() {
   await fsp.mkdir(runtimeDataDir, { recursive: true });
   const env = buildLockedRuntimeEnv(configEnv);
 
-  const buildFrontend = await runWithEnv(process.execPath, ['./scripts/build-frontend-bundle.js'], env);
-  if (buildFrontend.code !== 0) process.exit(buildFrontend.code || 1);
-
   const preflight = await runWithEnv(process.execPath, ['./scripts/preflight.js'], env);
   if (preflight.code !== 0) process.exit(preflight.code || 1);
 
