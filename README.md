@@ -121,7 +121,7 @@ npm run verify
 Check levels:
 
 - `npm run verify`: quick local validation for normal day-to-day changes.
-- `npm run validate:release`: full release gate (quick validation + backup).
+- `npm run validate:release`: full release gate (quick validation + dependency audit + backup).
 
 ## Recommended Flows
 
@@ -169,6 +169,7 @@ Validation security tests:
 
 - `npm run verify`
 - `npm run security`
+- `npm run deps:audit`
 - `npm run test:security`
 - `npm run validate:release`
 
@@ -424,6 +425,7 @@ Validation/ops:
 
 - `npm run security`
 - `npm run verify`
+- `npm run deps:audit`
 - `npm run preflight`
 - `npm run security:check`
 - `npm run test:security`
@@ -443,6 +445,7 @@ Validation/ops:
 - `scripts/security-tests.js` - auth/hash unit tests
 - `scripts/check-frontend-bundle.js` - verifies generated frontend bundle is up to date
 - `scripts/restore-tests.js` - restore directory path-safety tests
+- dependency audit via `npm run deps:audit`
 - `scripts/backup.js` - data backup
 - `scripts/restore.js` - data restore
 

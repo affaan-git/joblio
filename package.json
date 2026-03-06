@@ -8,6 +8,8 @@
     "build:frontend": "node ./scripts/build-frontend-bundle.js",
     "build:frontend:check": "node ./scripts/check-frontend-bundle.js",
     "preflight": "node ./scripts/preflight.js",
+    "deps:audit": "npm audit --omit=dev --audit-level=high",
+    "deps:audit:all": "npm audit --audit-level=high",
     "security": "npm run security:check && npm run test:security",
     "security:check": "node ./scripts/security-check.js",
     "verify": "npm run build:frontend:check && npm run preflight && npm run security:check && npm run test:security",
@@ -16,7 +18,7 @@
     "start": "node ./scripts/start.js",
     "tls:gen": "node ./scripts/gen-local-tls.js",
     "test:security": "node --test ./scripts/security-tests.js ./scripts/restore-tests.js",
-    "validate:release": "npm run verify && npm run backup",
+    "validate:release": "npm run verify && npm run deps:audit && npm run backup",
     "backup": "node ./scripts/backup.js",
     "restore": "node ./scripts/restore.js"
   }
