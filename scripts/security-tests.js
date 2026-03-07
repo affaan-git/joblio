@@ -122,3 +122,16 @@ test('template config blocks traversal/absolute paths and allows valid relative 
   const bad = validateTemplateConfig('../secret.md,/etc/passwd,C:\\x\\y.txt', templateRoot, { requireExisting: false });
   assert.ok(bad.issues.length >= 2);
 });
+
+test('template config rejects symlinked directory escapes', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'joblio-template-symlink-test-'));
+  const templateRoot = path.join(tempRoot, 'templates', 'resume');
+  const outsideDir = path.join(tempRoot, 'outside');
+  await fs.mkdir(templateRoot, { recursive: true });
+  await fs.mkdir(outsideDir, { recursive: true });
+  await fs.writeFile(path.join(outsideDir, 'pwn.md'), '# outside', 'utf8');
+  await fs.symlink(outsideDir, path.join(templateRoot, 'link-out'));
+
+  const result = validateTemplateConfig('link-out/pwn.md', templateRoot, { requireExisting: true });
+  assert.ok(result.issues.some((i) => i.includes('escapes template root')));
+});
