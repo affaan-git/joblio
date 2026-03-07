@@ -3,10 +3,14 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
 const { createPasswordHash, verifyPassword } = require('../lib/auth');
 const { AuthGuard } = require('../lib/auth-guard');
 const { parseAllowlist, isIpAllowed, normalizeIp, isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('../lib/ip-allowlist');
 const { isLoopbackHost, isWildcardHost, isPrivateOrLoopbackHost } = require('../lib/network-policy');
+const { validateTemplateConfig } = require('../lib/template-registry');
 
 test('password hash verify success/failure', () => {
   const hash = createPasswordHash('S3curePass!123');
@@ -102,4 +106,19 @@ test('network policy enforces private LAN host rules', () => {
   assert.equal(isPrivateOrLoopbackHost('192.168.1.10'), true);
   assert.equal(isPrivateOrLoopbackHost('10.10.0.8'), true);
   assert.equal(isPrivateOrLoopbackHost('8.8.8.8'), false);
+});
+
+test('template config blocks traversal/absolute paths and allows valid relative files', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'joblio-template-test-'));
+  const templateRoot = path.join(tempRoot, 'templates', 'resume');
+  await fs.mkdir(templateRoot, { recursive: true });
+  await fs.writeFile(path.join(templateRoot, 'ok.md'), '# ok', 'utf8');
+
+  const good = validateTemplateConfig('ok.md', templateRoot, { requireExisting: true });
+  assert.equal(good.issues.length, 0);
+  assert.equal(good.templates.length, 1);
+  assert.equal(good.templates[0].relativePath, 'ok.md');
+
+  const bad = validateTemplateConfig('../secret.md,/etc/passwd,C:\\x\\y.txt', templateRoot, { requireExisting: false });
+  assert.ok(bad.issues.length >= 2);
 });

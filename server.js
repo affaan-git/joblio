@@ -10,6 +10,7 @@ const { verifyPassword } = require('./lib/auth');
 const { AuthGuard } = require('./lib/auth-guard');
 const { normalizeIp, parseAllowlist, isIpAllowed, isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('./lib/ip-allowlist');
 const { isLoopbackHost, isWildcardHost, isPrivateOrLoopbackHost } = require('./lib/network-policy');
+const { validateTemplateConfig } = require('./lib/template-registry');
 
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 8787);
@@ -20,12 +21,14 @@ const ROOT_DIR = __dirname;
 const ASSETS_DIR = path.join(ROOT_DIR, 'assets');
 const DATA_DIR = path.resolve(process.env.JOBLIO_DATA_DIR || path.join(ROOT_DIR, '.joblio-data'));
 const TEMPLATE_DIR = path.join(ROOT_DIR, 'templates');
+const TEMPLATE_RESUME_DIR = path.join(TEMPLATE_DIR, 'resume');
 const STORAGE_DIR = path.join(DATA_DIR, 'storage');
 const TRASH_STORAGE_DIR = path.join(DATA_DIR, 'storage-trash');
 const LOG_DIR = path.join(DATA_DIR, 'logs');
 const STATE_PATH = path.join(DATA_DIR, 'state.json');
 const APP_HTML = path.join(ROOT_DIR, 'Joblio.html');
-const RESUME_TEMPLATE_PATH = path.join(TEMPLATE_DIR, 'resume-template.md');
+const RESUME_TEMPLATES_RAW = process.env.JOBLIO_RESUME_TEMPLATES || '';
+const MAX_TEMPLATE_BYTES = Number(process.env.MAX_TEMPLATE_BYTES || 10 * 1024 * 1024);
 const MAX_JSON_BODY_BYTES = Number(process.env.MAX_JSON_BODY_BYTES || 5 * 1024 * 1024);
 const MAX_UPLOAD_JSON_BYTES = Number(process.env.MAX_UPLOAD_JSON_BYTES || 35 * 1024 * 1024);
 const MAX_FILE_BYTES = Number(process.env.MAX_FILE_BYTES || 25 * 1024 * 1024);
@@ -107,6 +110,7 @@ async function ensureDirs() {
   validateStartupConfig();
   await fsp.mkdir(DATA_DIR, { recursive: true });
   await fsp.mkdir(TEMPLATE_DIR, { recursive: true });
+  await fsp.mkdir(TEMPLATE_RESUME_DIR, { recursive: true });
   await fsp.mkdir(STORAGE_DIR, { recursive: true });
   await fsp.mkdir(TRASH_STORAGE_DIR, { recursive: true });
   await fsp.mkdir(LOG_DIR, { recursive: true });
@@ -216,6 +220,43 @@ function validateStartupConfig() {
   if (!TLS_CERT_PATH || !TLS_KEY_PATH) {
     throw new Error('TLS enabled but JOBLIO_TLS_CERT_PATH or JOBLIO_TLS_KEY_PATH is missing.');
   }
+  const templateCheck = validateTemplateConfig(RESUME_TEMPLATES_RAW, TEMPLATE_RESUME_DIR, {
+    requireExisting: true,
+    maxBytes: MAX_TEMPLATE_BYTES,
+  });
+  if (templateCheck.issues.length) {
+    throw new Error(`Invalid JOBLIO_RESUME_TEMPLATES: ${templateCheck.issues.join('; ')}`);
+  }
+}
+
+function templateMimeType(name) {
+  const ext = path.extname(String(name || '')).toLowerCase();
+  if (ext === '.md') return 'text/markdown; charset=utf-8';
+  if (ext === '.txt') return 'text/plain; charset=utf-8';
+  if (ext === '.pdf') return 'application/pdf';
+  if (ext === '.doc') return 'application/msword';
+  if (ext === '.docx') return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  return 'application/octet-stream';
+}
+
+function safeDownloadFilename(name) {
+  const base = String(path.basename(String(name || 'template')) || 'template')
+    .replace(/[\r\n"]/g, '')
+    .replace(/[^a-zA-Z0-9._ -]/g, '_');
+  return base || 'template';
+}
+
+function getConfiguredResumeTemplates() {
+  const checked = validateTemplateConfig(RESUME_TEMPLATES_RAW, TEMPLATE_RESUME_DIR, {
+    requireExisting: true,
+    maxBytes: MAX_TEMPLATE_BYTES,
+  });
+  if (checked.issues.length) {
+    const err = new Error('Template configuration invalid');
+    err.statusCode = 400;
+    throw err;
+  }
+  return checked.templates;
 }
 
 async function applyPathPerms(targetPath, mode) {
@@ -1120,17 +1161,36 @@ async function handleApi(req, res, url) {
     return json(res, 200, { ok: auditIntegrity.ok, audit: auditIntegrity, at: new Date().toISOString() });
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/template/resume/list') {
+    const templates = getConfiguredResumeTemplates().map((t) => ({
+      id: t.id,
+      name: t.name,
+      path: t.relativePath,
+      size: t.size,
+    }));
+    return json(res, 200, { templates });
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/template/resume') {
-    let content = '';
-    try {
-      content = await fsp.readFile(RESUME_TEMPLATE_PATH, 'utf8');
-    } catch {
-      content = '# Joblio Resume Template\n\n## Header\n- Name\n- Email\n- Location\n- LinkedIn / Portfolio\n\n## Summary\n2-4 lines tailored to the role.\n\n## Experience\n- Role, Company, Dates\n- Impact bullets (metrics)\n\n## Skills\n- Languages\n- Frameworks\n- Tools\n';
+    const templates = getConfiguredResumeTemplates();
+    if (!templates.length) {
+      return json(res, 404, { error: 'No templates configured' });
     }
+    const requested = str(url.searchParams.get('id'), 240);
+    let selected = null;
+    if (requested) {
+      selected = templates.find((t) => t.id === requested) || null;
+      if (!selected) return json(res, 404, { error: 'Template not found' });
+    } else if (templates.length === 1) {
+      selected = templates[0];
+    } else {
+      return json(res, 400, { error: 'Multiple templates configured. Specify ?id=' });
+    }
+    const content = await fsp.readFile(selected.absPath);
     applySecurityHeaders(res);
     res.writeHead(200, {
-      'Content-Type': 'text/markdown; charset=utf-8',
-      'Content-Disposition': 'attachment; filename="joblio-resume-template.md"',
+      'Content-Type': templateMimeType(selected.name),
+      'Content-Disposition': `attachment; filename="${safeDownloadFilename(selected.name)}"`,
       'Cache-Control': 'no-store',
     });
     res.end(content);

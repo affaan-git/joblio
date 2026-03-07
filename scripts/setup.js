@@ -12,10 +12,12 @@ const { createPasswordHash } = require('../lib/auth');
 const { parseEnvText } = require('../lib/env-file');
 const { isLoopbackHost, isPrivateOrLoopbackHost, isWildcardHost } = require('../lib/network-policy');
 const { parseAllowlist, isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('../lib/ip-allowlist');
+const { validateTemplateConfig } = require('../lib/template-registry');
 
 const root = path.resolve(__dirname, '..');
 const dataDir = path.join(root, '.joblio-data');
 const configPath = path.join(dataDir, 'config.env');
+const resumeTemplateRoot = path.join(root, 'templates', 'resume');
 
 function randHex(bytes) {
   return crypto.randomBytes(bytes).toString('hex');
@@ -254,6 +256,14 @@ async function askInteractive(existing, options = {}) {
       }
     }
 
+    const defaultResumeTemplates = sanitizeValue(existing.JOBLIO_RESUME_TEMPLATES || '');
+    const resumeTemplatesRaw = await rl.question(`Resume template file paths CSV under templates/resume (blank disables) [${defaultResumeTemplates || 'disabled'}]: `);
+    const resumeTemplates = sanitizeValue(resumeTemplatesRaw || defaultResumeTemplates);
+    const templateCheck = validateTemplateConfig(resumeTemplates, resumeTemplateRoot, { requireExisting: true, maxBytes: 10 * 1024 * 1024 });
+    if (templateCheck.issues.length) {
+      throw new Error(templateCheck.issues.join('; '));
+    }
+
     return {
       skip: false,
       allowLan,
@@ -275,6 +285,7 @@ async function askInteractive(existing, options = {}) {
       authGuardMaxEntries,
       trustProxy,
       ipAllowlist,
+      resumeTemplates,
       apiToken: sanitizeValue(existing.JOBLIO_API_TOKEN || randHex(32)),
       auditKey: sanitizeValue(existing.JOBLIO_AUDIT_KEY || randHex(32)),
     };
@@ -310,6 +321,7 @@ async function writeConfig(result) {
     `AUTH_GUARD_MAX_ENTRIES=${sanitizeValue(result.authGuardMaxEntries)}`,
     `JOBLIO_TRUST_PROXY=${sanitizeValue(result.trustProxy)}`,
     `JOBLIO_IP_ALLOWLIST=${sanitizeValue(result.ipAllowlist)}`,
+    `JOBLIO_RESUME_TEMPLATES=${sanitizeValue(result.resumeTemplates)}`,
     '',
   ];
   const tmp = `${configPath}.tmp`;
@@ -343,6 +355,7 @@ function buildConfigEnv(result) {
     AUTH_GUARD_MAX_ENTRIES: sanitizeValue(result.authGuardMaxEntries),
     JOBLIO_TRUST_PROXY: sanitizeValue(result.trustProxy),
     JOBLIO_IP_ALLOWLIST: sanitizeValue(result.ipAllowlist),
+    JOBLIO_RESUME_TEMPLATES: sanitizeValue(result.resumeTemplates),
   };
 }
 
@@ -364,6 +377,7 @@ function runPostSetupValidation(result) {
 
 async function main() {
   const forceEdit = process.argv.includes('--reconfigure');
+  await fsp.mkdir(resumeTemplateRoot, { recursive: true });
   const existing = await loadExistingConfig();
   if (forceEdit && (!existing || Object.keys(existing).length === 0)) {
     throw new Error('No existing configuration found to reconfigure. Run `npm run setup` first.');

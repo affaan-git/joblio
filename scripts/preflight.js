@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { parseAllowlist, isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('../lib/ip-allowlist');
 const { isLoopbackHost, isWildcardHost, isPrivateOrLoopbackHost } = require('../lib/network-policy');
+const { validateTemplateConfig } = require('../lib/template-registry');
 
 const root = path.resolve(__dirname, '..');
 
@@ -27,7 +28,8 @@ function evaluatePreflight(env = process.env) {
   const ipAllowlistRaw = env.JOBLIO_IP_ALLOWLIST || '';
   const trustProxy = env.JOBLIO_TRUST_PROXY === '1';
   const dataDir = path.resolve(env.JOBLIO_DATA_DIR || path.join(root, '.joblio-data'));
-  const templatePath = path.join(root, 'templates', 'resume-template.md');
+  const templateRoot = path.join(root, 'templates', 'resume');
+  const resumeTemplatesRaw = env.JOBLIO_RESUME_TEMPLATES || '';
 
   const issues = [];
   const warns = [];
@@ -90,8 +92,9 @@ function evaluatePreflight(env = process.env) {
     issues.push(`Data directory is not readable/writable: ${dataDir}`);
   }
 
-  if (!fs.existsSync(templatePath)) {
-    warns.push(`Resume template missing; fallback template will be served: ${templatePath}`);
+  const templateCheck = validateTemplateConfig(resumeTemplatesRaw, templateRoot, { requireExisting: true, maxBytes: 10 * 1024 * 1024 });
+  if (templateCheck.issues.length) {
+    templateCheck.issues.forEach((i) => issues.push(i));
   }
 
   return { issues, warns };

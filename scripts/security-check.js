@@ -6,6 +6,7 @@ const path = require('node:path');
 const { parseEnvText } = require('../lib/env-file');
 const { parseAllowlist, isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('../lib/ip-allowlist');
 const { isLoopbackHost, isWildcardHost, isPrivateOrLoopbackHost } = require('../lib/network-policy');
+const { validateTemplateConfig } = require('../lib/template-registry');
 
 const root = path.resolve(__dirname, '..');
 const configPath = path.join(root, '.joblio-data', 'config.env');
@@ -94,6 +95,12 @@ function evaluateSecurityCheck(envOverride = null) {
 
   if (String(env.JOBLIO_COOKIE_SECURE || '1') !== '1') {
     issues.push('JOBLIO_COOKIE_SECURE must be 1.');
+  }
+
+  const templateRoot = path.join(root, 'templates', 'resume');
+  const templateCheck = validateTemplateConfig(String(env.JOBLIO_RESUME_TEMPLATES || ''), templateRoot, { requireExisting: true, maxBytes: 10 * 1024 * 1024 });
+  if (templateCheck.issues.length) {
+    templateCheck.issues.forEach((i) => issues.push(i));
   }
 
   try {

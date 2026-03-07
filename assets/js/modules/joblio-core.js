@@ -359,6 +359,12 @@ export function initJoblio() {
       URL.revokeObjectURL(url);
     }
 
+    function basenameFromPath(p) {
+      const s = String(p || "");
+      const parts = s.split("/");
+      return parts[parts.length - 1] || "template";
+    }
+
     let persistTimer = null;
     let persistInFlight = false;
     let persistQueued = false;
@@ -1300,13 +1306,42 @@ export function initJoblio() {
       dataMenu.classList.remove("open");
       await openHealthDialog();
     });
-    resumeTemplateBtn.addEventListener("click", () => {
+    resumeTemplateBtn.addEventListener("click", async () => {
       dataMenu.classList.remove("open");
-      downloadWithAuth("/api/template/resume", "joblio-resume-template.md")
-        .then(() => showToast("Resume template downloaded.", "success"))
-        .catch((err) => {
-          showToast(err?.status === 401 ? "Unauthorized. Re-authenticate in browser and reload." : "Could not download template.", "error");
-        });
+      try {
+        const payload = await requestJSON("/api/template/resume/list");
+        const templates = Array.isArray(payload?.templates) ? payload.templates : [];
+        if (!templates.length) {
+          showToast("No resume templates configured.", "warn");
+          return;
+        }
+        if (templates.length === 1) {
+          const one = templates[0];
+          await downloadWithAuth(`/api/template/resume?id=${encodeURIComponent(one.id)}`, basenameFromPath(one.path || one.name));
+          showToast("Resume template downloaded.", "success");
+          return;
+        }
+        const lines = templates.map((t, i) => `${i + 1}. ${t.path || t.name}`);
+        const answer = window.prompt(`Download templates:\nType a number (1-${templates.length}) or "all"\n\n${lines.join("\n")}`, "all");
+        if (!answer) return;
+        if (answer.trim().toLowerCase() === "all") {
+          for (const t of templates) {
+            await downloadWithAuth(`/api/template/resume?id=${encodeURIComponent(t.id)}`, basenameFromPath(t.path || t.name));
+          }
+          showToast(`Downloaded ${templates.length} templates.`, "success");
+          return;
+        }
+        const idx = Number(answer.trim());
+        if (!Number.isInteger(idx) || idx < 1 || idx > templates.length) {
+          showToast("Invalid template choice.", "warn");
+          return;
+        }
+        const selected = templates[idx - 1];
+        await downloadWithAuth(`/api/template/resume?id=${encodeURIComponent(selected.id)}`, basenameFromPath(selected.path || selected.name));
+        showToast("Resume template downloaded.", "success");
+      } catch (err) {
+        showToast(err?.status === 401 ? "Unauthorized. Re-authenticate in browser and reload." : "Could not download template.", "error");
+      }
     });
     importBtn.addEventListener("click", () => {
       dataMenu.classList.remove("open");

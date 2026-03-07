@@ -319,6 +319,7 @@ Setup prompts for:
 - Auth guard max entries
 - Trust proxy headers for client IP
 - IP allowlist CSV
+- Resume template paths CSV (relative paths under `templates/resume`)
 
 Setup output:
 
@@ -327,6 +328,7 @@ Setup output:
 - Generates random values for:
   - `JOBLIO_API_TOKEN`
   - `JOBLIO_AUDIT_KEY`
+- Resume template downloads are disabled when `JOBLIO_RESUME_TEMPLATES` is empty
 
 Setup file permissions:
 
@@ -365,6 +367,7 @@ These keys are written by setup and used at runtime.
 | `AUTH_GUARD_MAX_ENTRIES` | `20000` | In-memory auth guard entry cap |
 | `JOBLIO_TRUST_PROXY` | `0` | Trust `X-Forwarded-For` for client IP |
 | `JOBLIO_IP_ALLOWLIST` | empty | CSV allowlist of source IPs/CIDRs |
+| `JOBLIO_RESUME_TEMPLATES` | empty | CSV list of template file paths under `templates/resume` |
 
 Runtime override policy:
 
@@ -400,6 +403,7 @@ These are server-supported keys (advanced operations) that are not currently pro
 | `JOBLIO_ALLOW_LAN` | `0` | Enable guarded LAN mode |
 | `JOBLIO_TRUST_PROXY` | `0` | Trust `X-Forwarded-For` |
 | `JOBLIO_IP_ALLOWLIST` | empty | Allowed IPs/CIDRs (CSV) |
+| `JOBLIO_RESUME_TEMPLATES` | empty | CSV template paths under `templates/resume` |
 | `SESSION_TTL_MS` | `28800000` | Session idle timeout |
 | `SESSION_ABS_TTL_MS` | `86400000` | Session absolute timeout |
 
@@ -431,7 +435,8 @@ Data/template:
 
 - `GET /api/export`
 - `POST /api/import`
-- `GET /api/template/resume`
+- `GET /api/template/resume/list`
+- `GET /api/template/resume?id=<template-id>` (or without `id` when exactly one template is configured)
 
 ### Data Layout
 
