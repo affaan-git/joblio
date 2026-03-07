@@ -253,7 +253,72 @@ Persistent defaults:
 
 Single-process Node.js app. No external database required.
 
+```mermaid
+flowchart LR
+  Browser["Browser UI<br/>Joblio.html + assets/js/joblio.bundle.js"]
+
+  subgraph Backend["Node.js Backend"]
+    Server["server.js<br/>HTTPS + API routing"]
+    Auth["lib/auth.js + lib/auth-guard.js<br/>Basic Auth + lockout/backoff"]
+    Network["lib/network-policy.js + lib/ip-allowlist.js<br/>Host/IP policy"]
+    Templates["lib/template-registry.js<br/>Template path validation"]
+  end
+
+  subgraph RuntimeData["Runtime Data (.joblio-data)"]
+    Config["config.env"]
+    State["state.json"]
+    Storage["storage/ + storage-trash/"]
+    Sessions["sessions.enc"]
+    Logs["logs/ + snapshots/"]
+  end
+
+  subgraph Tooling["Tooling Scripts"]
+    Setup["scripts/setup.js<br/>setup/reconfigure"]
+    Start["scripts/start.js<br/>startup + preflight"]
+    Checks["scripts/preflight.js + scripts/security-check.js"]
+    Ops["scripts/backup.js + scripts/restore.js"]
+    Build["scripts/build-frontend-bundle.js"]
+  end
+
+  Browser -->|"HTTPS API + static assets"| Server
+  Server --> Auth
+  Server --> Network
+  Server --> Templates
+  Server --> RuntimeData
+  Setup --> Config
+  Setup --> Checks
+  Start --> Checks
+  Start --> Server
+  Ops --> RuntimeData
+  Build --> Browser
+```
+
 ## Connection Model
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant U as User Browser
+  participant S as Joblio Server
+
+  U->>S: GET / (Basic Auth challenge/response)
+  S-->>U: Joblio UI (authenticated)
+
+  U->>S: POST /api/auth/session
+  S-->>U: Set-Cookie joblio_sid + csrfToken
+
+  U->>S: GET /api/state (cookie)
+  S-->>U: State payload
+
+  U->>S: PUT /api/state + X-Joblio-CSRF (cookie)
+  S-->>U: Updated state
+
+  U->>S: POST /api/auth/revoke-all + X-Joblio-CSRF
+  S-->>U: Sessions invalidated (new epoch)
+
+  U->>S: POST /api/auth/logout + X-Joblio-CSRF
+  S-->>U: Cookie cleared
+```
 
 ### Authentication
 
