@@ -1,5 +1,5 @@
 # Joblio
-
+#TODO: Replace placeholder image
 A local, single-user job application tracker built to support my job search.
 
 ![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js)
@@ -188,6 +188,7 @@ Generated build artifacts:
 
 Validation security tests:
 
+- `npm run lint`
 - `npm run verify`
 - `npm run security`
 - `npm run deps:audit`
@@ -527,6 +528,8 @@ Core:
 
 Validation/ops:
 
+- `npm run lint`
+- `npm run lint:fix`
 - `npm run security`
 - `npm run verify`
 - `npm run deps:audit`

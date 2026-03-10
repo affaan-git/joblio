@@ -10,6 +10,8 @@
     "preflight": "node ./scripts/preflight.js",
     "deps:audit": "npm audit --omit=dev --audit-level=high",
     "deps:audit:all": "npm audit --audit-level=high",
+    "lint": "eslint . --ignore-pattern assets/js/joblio.bundle.js",
+    "lint:fix": "eslint . --fix --ignore-pattern assets/js/joblio.bundle.js",
     "security": "npm run security:check && npm run test:security",
     "security:check": "node ./scripts/security-check.js",
     "verify": "npm run build:frontend:check && npm run preflight && npm run security:check && npm run test:security",
@@ -21,5 +23,10 @@
     "validate:release": "npm run verify && npm run deps:audit && npm run backup",
     "backup": "node ./scripts/backup.js",
     "restore": "node ./scripts/restore.js"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.22.0",
+    "eslint": "^9.22.0",
+    "globals": "^15.15.0"
   }
 }

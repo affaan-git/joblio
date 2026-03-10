@@ -9,4 +9,15 @@ assets/js/joblio.bundle.js
 README.md
 *.log
 *.tmp
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.env
+.env.*
+.envrc
 *.DS_Store
+.vscode
+.idea
+*.swp
+*.bak
+*.orig
