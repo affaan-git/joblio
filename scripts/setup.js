@@ -69,14 +69,27 @@ function validatePasswordStrength(pass) {
   }
 }
 
-async function promptHidden(promptText) {
+async function promptHidden(promptText, options = {}) {
   if (!stdin.isTTY || !stdout.isTTY) {
     throw new Error('Interactive setup requires a TTY terminal.');
   }
-  return new Promise((resolve) => {
+  const rl = options.rl || null;
+  return new Promise((resolve, reject) => {
     const input = stdin;
     const output = stdout;
     let value = '';
+    let cleaned = false;
+
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      input.removeListener('data', onData);
+      try { input.setRawMode(false); } catch {}
+      input.pause();
+      if (rl && typeof rl.resume === 'function') rl.resume();
+    };
+
+    if (rl && typeof rl.pause === 'function') rl.pause();
     output.write(promptText);
     input.setRawMode(true);
     input.resume();
@@ -84,13 +97,13 @@ async function promptHidden(promptText) {
 
     const onData = (char) => {
       if (char === '\u0003') {
+        cleanup();
         output.write('\n');
-        process.exit(130);
+        reject(new Error('Setup cancelled by user.'));
+        return;
       }
       if (char === '\r' || char === '\n') {
-        input.setRawMode(false);
-        input.pause();
-        input.removeListener('data', onData);
+        cleanup();
         output.write('\n');
         resolve(value);
         return;
@@ -129,7 +142,7 @@ async function askInteractive(existing, options = {}) {
     const passLabel = hasExistingHash
       ? 'Basic auth password (leave blank to keep existing): '
       : 'Basic auth password (min 8 chars, include letter + number + symbol): ';
-    const pass = await promptHidden(passLabel);
+    let pass = await promptHidden(passLabel, { rl });
     let useExistingHash = false;
     if (!pass && hasExistingHash) {
       useExistingHash = true;
@@ -137,11 +150,13 @@ async function askInteractive(existing, options = {}) {
 
     let passwordHash = sanitizeValue(existing.JOBLIO_BASIC_AUTH_HASH || '');
     if (!useExistingHash) {
-      const pass2 = await promptHidden('Confirm password: ');
+      let pass2 = await promptHidden('Confirm password: ', { rl });
       if (pass !== pass2) throw new Error('Password confirmation did not match.');
       validatePasswordStrength(pass);
       passwordHash = createPasswordHash(pass);
+      pass2 = '';
     }
+    pass = '';
 
     const defaultAllowLan = sanitizeValue(existing.JOBLIO_ALLOW_LAN || '0') === '1';
     const allowLanRaw = await rl.question(`Allow LAN access from other local devices? (${defaultAllowLan ? 'Y/n' : 'y/N'}): `);
