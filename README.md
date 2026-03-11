@@ -14,6 +14,7 @@ A local, single-user job application tracker built to support my job search.
 ## Table of Contents
 
 - [What Joblio Does](#what-joblio-does)
+- [Scope and Non-Goals (for now)](#scope-and-non-goals-for-now)
 - [Getting Started](#getting-started)
 - [Usage](#usage)
 - [Recommended Flows](#recommended-flows)
@@ -23,7 +24,6 @@ A local, single-user job application tracker built to support my job search.
 - [Architecture](#architecture)
 - [Connection Model](#connection-model)
 - [Technical Reference](#technical-reference)
-- [Scope and Non-Goals (for now)](#scope-and-non-goals-for-now)
 - [Troubleshooting](#troubleshooting)
 
 ## What Joblio Does
@@ -34,6 +34,13 @@ A local, single-user job application tracker built to support my job search.
 - Supports import/export of tracker state
 - Supports backup/restore of on-disk data
 - Uses auth/session/CSRF/security headers/rate limits
+
+## Scope and Non-Goals (for now)
+
+- Single-user, local/self-hosted
+- No multi-tenant isolation model
+- No external identity provider integration
+- No cloud-managed deployment stack included
 
 ## Getting Started
 
@@ -566,13 +573,6 @@ Command usage guidance:
   - `npm run build` after frontend module changes
   - `npm run verify` before commit for quick local validation
   - `npm run validate:release` before release for full release-gate validation
-
-## Scope and Non-Goals (for now)
-
-- Single-user, local/self-hosted
-- No multi-tenant isolation model
-- No external identity provider integration
-- No cloud-managed deployment stack included
 
 ## Troubleshooting
 
