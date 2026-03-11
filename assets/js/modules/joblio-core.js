@@ -496,13 +496,6 @@ export function initJoblio() {
 
     async function hydrate() {
       if (IS_DIRECT_FILE_MODE) {
-        if (!state.apps.length && !state.trashApps.length && !state.trashFiles.length) {
-          state.apps = [
-            createApp({ company: "Q2", title: "Software Engineer", location: "Austin, TX", workMode: "Hybrid" }),
-            createApp({ company: "AWS", title: "Security Automation Engineer", location: "Austin, TX", workMode: "On-site" }),
-          ];
-          state.activeId = state.apps[0]?.id || null;
-        }
         setBackendHealth("disconnected", "Offline");
         const savedWidth = Number(localStorage.getItem(LEFT_WIDTH_KEY));
         if (savedWidth && Number.isFinite(savedWidth)) {
@@ -529,15 +522,6 @@ export function initJoblio() {
         } else {
           showToast("Backend unavailable. Start server.js", "error");
         }
-      }
-
-      if (!state.apps.length && !state.trashApps.length && !state.trashFiles.length) {
-        state.apps = [
-          createApp({ company: "Q2", title: "Software Engineer", location: "Austin, TX", workMode: "Hybrid" }),
-          createApp({ company: "AWS", title: "Security Automation Engineer", location: "Austin, TX", workMode: "On-site" }),
-        ];
-        state.activeId = state.apps[0]?.id || null;
-        persist();
       }
 
       const savedWidth = Number(localStorage.getItem(LEFT_WIDTH_KEY));
