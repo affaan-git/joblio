@@ -16,7 +16,6 @@ import {
   nowIso,
   todayDateStr,
   nowTimeStr,
-  normalizeHHMM,
   normalizeTimeZone,
   hhmmFromIsoInTimeZone,
   fmtDate,
@@ -1412,11 +1411,6 @@ export function initJoblio() {
       setStatus(app, action);
       closeStatusDialog();
     });
-
-    function closeHeaderMenus() {
-      dataMenu.classList.remove("open");
-      filtersMenu.classList.remove("open");
-    }
 
     function isTextEntryTarget(target) {
       if (!target) return false;
