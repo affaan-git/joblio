@@ -29,17 +29,24 @@ const keyPath = path.join(outDir, 'localhost-key.pem');
     '-addext', 'subjectAltName=DNS:localhost,IP:127.0.0.1',
   ];
 
-  const run = spawnSync('openssl', cmd, { cwd: root, stdio: 'inherit' });
+  const run = spawnSync('openssl', cmd, { cwd: root, stdio: 'pipe', encoding: 'utf8' });
   if (run.status !== 0) {
     // eslint-disable-next-line no-console
     console.error('Failed generating TLS cert/key.');
+    const errOut = String(run.stderr || run.stdout || '').trim();
+    if (errOut) {
+      // eslint-disable-next-line no-console
+      console.error(errOut);
+    }
     process.exit(run.status || 1);
   }
 
   // eslint-disable-next-line no-console
-  console.log(`Generated cert: ${certPath}`);
+  console.log('TLS files generated:');
   // eslint-disable-next-line no-console
-  console.log(`Generated key:  ${keyPath}`);
+  console.log(`  cert: ${certPath}`);
   // eslint-disable-next-line no-console
-  console.log('Then run interactive setup and use those cert/key paths.');
+  console.log(`  key:  ${keyPath}`);
+  // eslint-disable-next-line no-console
+  console.log('Next: run `npm run setup` and use these paths when prompted.');
 })();
