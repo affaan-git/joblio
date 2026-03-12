@@ -443,6 +443,13 @@
       background: var(--bg-hover);
     }
 
+    .action-menu button:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+      color: var(--text-muted);
+      background: transparent;
+    }
+
     .filter-menu {
       width: min(260px, 78vw);
       gap: 0.45rem;
@@ -591,6 +598,16 @@
       padding: 0.46rem 0.56rem;
       width: 100%;
       font-size: 0.84rem;
+    }
+
+    input[type="date"],
+    input[type="time"] {
+      color: var(--text);
+    }
+
+    input[type="date"]::-webkit-datetime-edit,
+    input[type="time"]::-webkit-datetime-edit {
+      color: var(--text);
     }
 
     textarea { min-height: 92px; resize: vertical; }

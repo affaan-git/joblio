@@ -40,6 +40,23 @@ export function hhmmFromIsoInTimeZone(iso, timeZone) {
   }
 }
 
+export function ymdFromIsoInTimeZone(iso, timeZone) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  try {
+    const out = new Intl.DateTimeFormat('en-CA', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      timeZone: normalizeTimeZone(timeZone),
+    }).format(d);
+    return /^\d{4}-\d{2}-\d{2}$/.test(out) ? out : '';
+  } catch {
+    return '';
+  }
+}
+
 export function fmtDate(iso) {
   if (!iso) return '';
   const d = new Date(iso);

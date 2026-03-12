@@ -14,10 +14,10 @@ import {
 import { getDomRefs } from "./dom.js";
 import {
   nowIso,
-  todayDateStr,
   nowTimeStr,
   normalizeTimeZone,
   hhmmFromIsoInTimeZone,
+  ymdFromIsoInTimeZone,
   fmtDate,
   fmtDateUtc,
   formatTimeShort,
@@ -100,6 +100,7 @@ export function initJoblio() {
     let sessionBootstrapInFlight = null;
     let serverTimeZone = "UTC";
     let serverNowIso = "";
+    let resumeTemplatesAvailable = false;
 
     function uid() {
       return `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -389,6 +390,33 @@ export function initJoblio() {
       healthDialog.classList.remove("open");
     }
 
+    function setResumeTemplateButtonState(enabled, reason = "") {
+      resumeTemplatesAvailable = Boolean(enabled);
+      resumeTemplateBtn.disabled = !resumeTemplatesAvailable;
+      resumeTemplateBtn.setAttribute("aria-disabled", String(!resumeTemplatesAvailable));
+      resumeTemplateBtn.title = resumeTemplatesAvailable
+        ? "Download configured resume template(s)"
+        : (reason || "No resume templates configured");
+    }
+
+    async function refreshResumeTemplateAvailability() {
+      if (IS_DIRECT_FILE_MODE) {
+        setResumeTemplateButtonState(false, "Templates unavailable in direct file mode");
+        return;
+      }
+      try {
+        const payload = await requestJSON("/api/template/resume/list");
+        const templates = Array.isArray(payload?.templates) ? payload.templates : [];
+        setResumeTemplateButtonState(templates.length > 0);
+      } catch (err) {
+        if (err?.status === 401) {
+          setResumeTemplateButtonState(false, "Unauthorized. Re-authenticate and reload.");
+          return;
+        }
+        setResumeTemplateButtonState(false, "No resume templates configured");
+      }
+    }
+
     async function renderHealthDialog() {
       healthDialogBody.innerHTML = `<div class="small">Loading...</div>`;
       try {
@@ -402,15 +430,23 @@ export function initJoblio() {
         const rows = [
           ["Status", health.ok ? "OK" : "Error"],
           ["Server time (UTC)", fmtDateUtc(health.at)],
-          ["Uptime (sec)", Number.isFinite(health.uptimeSec) ? String(health.uptimeSec) : "Hidden"],
           ["Last error", health.lastError ? escapeHtml(health.lastError) : "None"],
           ["Audit verified", integrity?.ok === true ? "Yes" : integrity?.ok === false ? "No" : "Unavailable"],
-          ["Audit entries", Number.isFinite(integrity?.audit?.entries) ? String(integrity.audit.entries) : "Hidden"],
-          ["State max body", health?.limits?.maxJsonBodyBytes ? `${health.limits.maxJsonBodyBytes} bytes` : "Hidden"],
-          ["Upload max body", health?.limits?.maxUploadJsonBytes ? `${health.limits.maxUploadJsonBytes} bytes` : "Hidden"],
-          ["Max file size", health?.limits?.maxFileBytes ? `${health.limits.maxFileBytes} bytes` : "Hidden"],
-          ["Purge min age", health?.limits?.purgeMinAgeSec ? `${health.limits.purgeMinAgeSec}s` : "Hidden"],
         ];
+        if (Number.isFinite(health?.uptimeSec)) rows.push(["Uptime (sec)", String(health.uptimeSec)]);
+        if (Number.isFinite(integrity?.audit?.entries)) rows.push(["Audit entries", String(integrity.audit.entries)]);
+        if (Number.isFinite(health?.limits?.maxJsonBodyBytes) && health.limits.maxJsonBodyBytes > 0) {
+          rows.push(["State max body", `${health.limits.maxJsonBodyBytes} bytes`]);
+        }
+        if (Number.isFinite(health?.limits?.maxUploadJsonBytes) && health.limits.maxUploadJsonBytes > 0) {
+          rows.push(["Upload max body", `${health.limits.maxUploadJsonBytes} bytes`]);
+        }
+        if (Number.isFinite(health?.limits?.maxFileBytes) && health.limits.maxFileBytes > 0) {
+          rows.push(["Max file size", `${health.limits.maxFileBytes} bytes`]);
+        }
+        if (Number.isFinite(health?.limits?.purgeMinAgeSec) && health.limits.purgeMinAgeSec > 0) {
+          rows.push(["Purge min age", `${health.limits.purgeMinAgeSec}s`]);
+        }
         healthDialogBody.innerHTML = rows
           .map(([label, value]) => `
             <div class="health-row">
@@ -495,6 +531,7 @@ export function initJoblio() {
 
     async function hydrate() {
       if (IS_DIRECT_FILE_MODE) {
+        setResumeTemplateButtonState(false, "Templates unavailable in direct file mode");
         setBackendHealth("disconnected", "Offline");
         const savedWidth = Number(localStorage.getItem(LEFT_WIDTH_KEY));
         if (savedWidth && Number.isFinite(savedWidth)) {
@@ -506,6 +543,7 @@ export function initJoblio() {
       try {
         const payload = await requestJSON("/api/state");
         applyServerState(payload.state || {});
+        await refreshResumeTemplateAvailability();
         setBackendHealth("connected", "Online");
       } catch (err) {
         state.apps = [];
@@ -515,6 +553,7 @@ export function initJoblio() {
         state.theme = "dark";
         document.body.classList.toggle("theme-light", false);
         syncThemeLabel();
+        setResumeTemplateButtonState(false, "No resume templates configured");
         setBackendHealth("disconnected", "Offline");
         if (err?.status === 401) {
           showToast("Unauthorized. Re-authenticate in browser and reload.", "error");
@@ -722,7 +761,7 @@ export function initJoblio() {
       app.status = next;
       if (next === "applied") {
         if (!options.preserveAppliedDate && !app.appliedAt) {
-          app.appliedAt = todayDateStr();
+          app.appliedAt = ymdFromIsoInTimeZone(t, serverTimeZone) || "";
         }
         if (!app.appliedTime) {
           app.appliedTime = hhmmFromIsoInTimeZone(t, serverTimeZone) || nowTimeStr();
@@ -921,7 +960,7 @@ export function initJoblio() {
         }
         app.appliedTime = value;
         if (!app.appliedAt) {
-          app.appliedAt = todayDateStr();
+          app.appliedAt = ymdFromIsoInTimeZone(nowIso(), serverTimeZone) || "";
         }
         if (app.status !== "applied") {
           setStatus(app, "applied", { preserveAppliedDate: true });
@@ -1248,10 +1287,14 @@ export function initJoblio() {
       persist();
     });
 
-    dataBtn.addEventListener("click", (e) => {
+    dataBtn.addEventListener("click", async (e) => {
       e.stopPropagation();
       filtersMenu.classList.remove("open");
+      const willOpen = !dataMenu.classList.contains("open");
       dataMenu.classList.toggle("open");
+      if (willOpen) {
+        await refreshResumeTemplateAvailability();
+      }
     });
 
     filtersBtn.addEventListener("click", (e) => {
@@ -1291,13 +1334,16 @@ export function initJoblio() {
     });
     resumeTemplateBtn.addEventListener("click", async () => {
       dataMenu.classList.remove("open");
+      if (!resumeTemplatesAvailable || resumeTemplateBtn.disabled) return;
       try {
         const payload = await requestJSON("/api/template/resume/list");
         const templates = Array.isArray(payload?.templates) ? payload.templates : [];
         if (!templates.length) {
+          setResumeTemplateButtonState(false, "No resume templates configured");
           showToast("No resume templates configured.", "warn");
           return;
         }
+        setResumeTemplateButtonState(true);
         if (templates.length === 1) {
           const one = templates[0];
           await downloadWithAuth(`/api/template/resume?id=${encodeURIComponent(one.id)}`, basenameFromPath(one.path || one.name));
@@ -1323,6 +1369,7 @@ export function initJoblio() {
         await downloadWithAuth(`/api/template/resume?id=${encodeURIComponent(selected.id)}`, basenameFromPath(selected.path || selected.name));
         showToast("Resume template downloaded.", "success");
       } catch (err) {
+        setResumeTemplateButtonState(false, err?.status === 401 ? "Unauthorized. Re-authenticate and reload." : "No resume templates configured");
         showToast(err?.status === 401 ? "Unauthorized. Re-authenticate in browser and reload." : "Could not download template.", "error");
       }
     });
@@ -1459,6 +1506,8 @@ export function initJoblio() {
         closeHealthDialog();
       }
     });
+
+    setResumeTemplateButtonState(false, "Checking template availability...");
 
     (async () => {
       if (IS_DIRECT_FILE_MODE) {
