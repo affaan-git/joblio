@@ -423,6 +423,9 @@ export function initJoblio() {
         const health = await requestJSON("/api/health?verbose=1");
         serverTimeZone = normalizeTimeZone(health?.serverTimeZone || serverTimeZone);
         serverNowIso = String(health?.at || serverNowIso);
+        if (!persistInFlight) {
+          setBackendHealth("connected", "Online");
+        }
         let integrity = { ok: null, audit: null };
         try {
           integrity = await requestJSON("/api/integrity/verify");
@@ -456,6 +459,9 @@ export function initJoblio() {
           `)
           .join("");
       } catch (err) {
+        if (err?.status !== 401) {
+          setBackendHealth("disconnected", "Offline");
+        }
         healthDialogBody.innerHTML = `<div class="small">Could not load health report: ${escapeHtml(err?.message || "Unknown error")}</div>`;
       }
     }
