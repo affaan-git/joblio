@@ -35,20 +35,49 @@ export function createSearchFilters(deps) {
 
   function parseSearchQuery(rawQuery) {
     const query = String(rawQuery || '');
-    const tokens = { company: [], title: [], location: [], notes: [], status: [], mode: [] };
-    const tokenRegex = /\b(company|title|location|notes|status|mode):(?:"([^"]*)"|([^\s]+))/gi;
+    const tokens = {
+      company: [],
+      title: [],
+      location: [],
+      notes: [],
+      status: [],
+      mode: [],
+      date: [],
+      created: [],
+      updated: [],
+      status_updated: [],
+      applied: [],
+      followup: [],
+    };
+    const tokenRegex = /\b(company|title|location|notes|status|mode|date|created|updated|status_updated|applied|followup):(?:"([^"]*)"|([^\s]+))/gi;
     let match;
     while ((match = tokenRegex.exec(query)) !== null) {
       const field = match[1].toLowerCase();
       const value = (match[2] || match[3] || '').trim().toLowerCase();
       if (!value || !tokens[field]) continue;
+      if (['date', 'created', 'updated', 'status_updated', 'applied', 'followup'].includes(field)) {
+        if (!/^\d{4}(?:-\d{2}){0,2}$/.test(value)) continue;
+      }
       tokens[field].push(value);
     }
     const freeText = query
-      .replace(/\b(company|title|location|notes|status|mode):(?:"[^"]*"|[^\s]+)/gi, ' ')
+      .replace(/\b(company|title|location|notes|status|mode|date|created|updated|status_updated|applied|followup):(?:"[^"]*"|[^\s]+)/gi, ' ')
       .toLowerCase();
     const terms = freeText.split(/\s+/).filter(Boolean);
     return { tokens, terms };
+  }
+
+  function normalizeIsoDatePrefix(value) {
+    const str = String(value || '').trim();
+    const match = str.match(/^(\d{4}-\d{2}-\d{2})/);
+    return match ? match[1] : '';
+  }
+
+  function datePrefixMatches(sourceDatePrefix, tokenValue) {
+    if (!sourceDatePrefix) return false;
+    const token = String(tokenValue || '').trim();
+    if (!token) return false;
+    return sourceDatePrefix.startsWith(token);
   }
 
   function appendSearchToken(tokenText) {
@@ -80,6 +109,9 @@ export function createSearchFilters(deps) {
       'status:applied',
       'status:in_progress',
       'mode:remote',
+      'date:',
+      'created:',
+      'applied:',
     ];
     const dynamicCompany = uniqueTopValues(state.apps.map((a) => a.company)).map((v) => `company:\"${v}\"`);
     const dynamicTitle = uniqueTopValues(state.apps.map((a) => a.title), 3).map((v) => `title:\"${v}\"`);
@@ -123,6 +155,18 @@ export function createSearchFilters(deps) {
         return !(statusId.includes(v) || statusLabel.includes(v));
       })) return false;
       if (tokens.mode.some((v) => !String(app.workMode || '').toLowerCase().includes(v))) return false;
+      const createdDate = normalizeIsoDatePrefix(app.createdAt);
+      const updatedDate = normalizeIsoDatePrefix(app.updatedAt);
+      const statusUpdatedDate = normalizeIsoDatePrefix(app.statusUpdatedAt);
+      const appliedDate = normalizeIsoDatePrefix(app.appliedAt);
+      const followUpDate = normalizeIsoDatePrefix(app.nextFollowUpAt);
+      const anyDateFields = [createdDate, updatedDate, statusUpdatedDate, appliedDate, followUpDate].filter(Boolean);
+      if (tokens.created.some((v) => !datePrefixMatches(createdDate, v))) return false;
+      if (tokens.updated.some((v) => !datePrefixMatches(updatedDate, v))) return false;
+      if (tokens.status_updated.some((v) => !datePrefixMatches(statusUpdatedDate, v))) return false;
+      if (tokens.applied.some((v) => !datePrefixMatches(appliedDate, v))) return false;
+      if (tokens.followup.some((v) => !datePrefixMatches(followUpDate, v))) return false;
+      if (tokens.date.some((v) => !anyDateFields.some((d) => datePrefixMatches(d, v)))) return false;
       if (!terms.length) return true;
       const hay = `${app.company} ${app.title} ${app.location} ${app.note}`.toLowerCase();
       return terms.every((t) => hay.includes(t));
