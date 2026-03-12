@@ -6,8 +6,6 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const readline = require('node:readline/promises');
-const { stdin, stdout } = require('node:process');
 const prompts = require('prompts');
 const { createPasswordHash } = require('../lib/auth');
 const { parseEnvText } = require('../lib/env-file');
@@ -22,11 +20,6 @@ const resumeTemplateRoot = path.join(root, 'templates', 'resume');
 
 function randHex(bytes) {
   return crypto.randomBytes(bytes).toString('hex');
-}
-
-function parseBoolText(v, fallback = false) {
-  if (v == null || v === '') return fallback;
-  return ['1', 'true', 'yes', 'y', 'on'].includes(String(v).trim().toLowerCase());
 }
 
 function parsePort(v, fallback = 8787) {
@@ -55,6 +48,38 @@ function sanitizeValue(v) {
   return String(v || '').replace(/\r/g, '').replace(/\n/g, '');
 }
 
+const PROMPT_OPTIONS = {
+  onCancel: () => {
+    throw new Error('Setup cancelled by user.');
+  },
+};
+
+async function promptConfirm(message, initial) {
+  const answer = await prompts({
+    type: 'confirm',
+    name: 'value',
+    message,
+    initial: Boolean(initial),
+  }, PROMPT_OPTIONS);
+  if (typeof answer?.value !== 'boolean') {
+    throw new Error('Setup cancelled by user.');
+  }
+  return answer.value;
+}
+
+async function promptText(message, initial = '') {
+  const answer = await prompts({
+    type: 'text',
+    name: 'value',
+    message,
+    initial: String(initial || ''),
+  }, PROMPT_OPTIONS);
+  if (typeof answer?.value !== 'string') {
+    throw new Error('Setup cancelled by user.');
+  }
+  return sanitizeValue(answer.value);
+}
+
 function validatePasswordStrength(pass) {
   if (pass.length < 8) {
     throw new Error('Password must be at least 8 characters.');
@@ -70,220 +95,201 @@ function validatePasswordStrength(pass) {
   }
 }
 
-async function promptHidden(promptText, options = {}) {
-  if (!stdin.isTTY || !stdout.isTTY) {
+async function promptHidden(promptText) {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
     throw new Error('Interactive setup requires a TTY terminal.');
   }
-  const rl = options.rl || null;
-  if (rl && typeof rl.pause === 'function') rl.pause();
-  try {
-    const message = String(promptText || '').replace(/:\s*$/, '');
-    const answer = await prompts({
-      type: 'password',
-      name: 'value',
-      message,
-    }, {
-      onCancel: () => {
-        throw new Error('Setup cancelled by user.');
-      },
-    });
-    if (!answer || typeof answer.value !== 'string') {
-      throw new Error('Setup cancelled by user.');
-    }
-    return answer.value;
-  } finally {
-    if (rl && typeof rl.resume === 'function') rl.resume();
+  const message = String(promptText || '').replace(/:\s*$/, '');
+  const answer = await prompts({
+    type: 'password',
+    name: 'value',
+    message,
+  }, PROMPT_OPTIONS);
+  if (!answer || typeof answer.value !== 'string') {
+    throw new Error('Setup cancelled by user.');
   }
+  return answer.value;
 }
 
 async function askInteractive(existing, options = {}) {
-  if (!stdin.isTTY || !stdout.isTTY) {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
     throw new Error('Interactive setup requires a TTY terminal.');
   }
-  const rl = readline.createInterface({ input: stdin, output: stdout });
-  try {
-    const forceEdit = Boolean(options.forceEdit);
-    const exists = Boolean(existing && Object.keys(existing).length > 0);
-    if (exists && !forceEdit) {
-      const updateRaw = await rl.question('Existing config found. Update it? (y/N): ');
-      if (!parseBoolText(updateRaw, false)) {
-        return { skip: true };
-      }
-    }
-
-    const defaultUser = sanitizeValue(existing.JOBLIO_BASIC_AUTH_USER || 'joblio');
-    const userRaw = await rl.question(`Basic auth username [${defaultUser}]: `);
-    const user = sanitizeValue(userRaw || defaultUser) || 'joblio';
-
-    const hasExistingHash = String(existing.JOBLIO_BASIC_AUTH_HASH || '').startsWith('scrypt$');
-    const passLabel = hasExistingHash
-      ? 'Basic auth password (leave blank to keep existing): '
-      : 'Basic auth password (min 8 chars, include letter + number + symbol): ';
-    let pass = await promptHidden(passLabel, { rl });
-    let useExistingHash = false;
-    if (!pass && hasExistingHash) {
-      useExistingHash = true;
-    }
-
-    let passwordHash = sanitizeValue(existing.JOBLIO_BASIC_AUTH_HASH || '');
-    if (!useExistingHash) {
-      let pass2 = await promptHidden('Confirm password: ', { rl });
-      if (pass !== pass2) throw new Error('Password confirmation did not match.');
-      validatePasswordStrength(pass);
-      passwordHash = createPasswordHash(pass);
-      pass2 = '';
-    }
-    pass = '';
-
-    const defaultAllowLan = sanitizeValue(existing.JOBLIO_ALLOW_LAN || '0') === '1';
-    const allowLanRaw = await rl.question(`Allow LAN access from other local devices? (${defaultAllowLan ? 'Y/n' : 'y/N'}): `);
-    const allowLan = parseBoolText(allowLanRaw, defaultAllowLan) ? '1' : '0';
-
-    let host = '127.0.0.1';
-    if (allowLan === '1') {
-      const defaultLanHost = sanitizeValue(existing.HOST || '');
-      const lanHostRaw = await rl.question(`LAN bind host (private interface IP, not 0.0.0.0) [${defaultLanHost || 'required'}]: `);
-      host = sanitizeValue(lanHostRaw || defaultLanHost);
-      if (!host) throw new Error('LAN bind host is required when LAN mode is enabled.');
-      if (isWildcardHost(host)) throw new Error('Wildcard bind host is not allowed in LAN mode.');
-      if (!isPrivateOrLoopbackHost(host)) throw new Error(`LAN bind host must be private/loopback. Got: ${host}`);
-      if (isLoopbackHost(host)) {
-        throw new Error('LAN mode requires a non-loopback private interface IP to be reachable from other devices.');
-      }
-    }
-
-    const defaultPort = parsePort(existing.PORT, 8787);
-    const portRaw = await rl.question(`Port [${defaultPort}]: `);
-    const port = parsePort(portRaw, defaultPort);
-
-    const defaultDataDir = sanitizeValue(existing.JOBLIO_DATA_DIR || path.join(root, '.joblio-data'));
-    const dataDirRaw = await rl.question(`Storage data directory [${defaultDataDir}]: `);
-    const runtimeDataDir = sanitizeValue(dataDirRaw || defaultDataDir);
-    if (!runtimeDataDir) throw new Error('Storage data directory is required.');
-
-    const defaultBackupDir = sanitizeValue(existing.JOBLIO_BACKUP_DIR || path.join(root, 'backups'));
-    const backupDirRaw = await rl.question(`Backup directory [${defaultBackupDir}]: `);
-    const backupDir = sanitizeValue(backupDirRaw || defaultBackupDir);
-    if (!backupDir) throw new Error('Backup directory is required.');
-
-    const defaultTlsCertPath = sanitizeValue(existing.JOBLIO_TLS_CERT_PATH || path.join(runtimeDataDir, 'tls', 'localhost-cert.pem'));
-    const defaultTlsKeyPath = sanitizeValue(existing.JOBLIO_TLS_KEY_PATH || path.join(runtimeDataDir, 'tls', 'localhost-key.pem'));
-    const certPathRaw = await rl.question(`TLS cert path [${defaultTlsCertPath}]: `);
-    const keyPathRaw = await rl.question(`TLS key path [${defaultTlsKeyPath}]: `);
-    const certPath = sanitizeValue(certPathRaw || defaultTlsCertPath);
-    const keyPath = sanitizeValue(keyPathRaw || defaultTlsKeyPath);
-
-    if (!certPath || !keyPath) {
-      throw new Error('TLS cert and key paths are required.');
-    }
-    if (!fs.existsSync(path.resolve(certPath))) {
-      throw new Error(`TLS cert not found: ${certPath}`);
-    }
-    if (!fs.existsSync(path.resolve(keyPath))) {
-      throw new Error(`TLS key not found: ${keyPath}`);
-    }
-
-    const defaultRateAuthSession = parseIntInRange(existing.RATE_MAX_AUTH_SESSION, 45, 1, 100000);
-    const rateAuthSessionRaw = await rl.question(`Auth session rate limit per window [${defaultRateAuthSession}]: `);
-    const rateMaxAuthSession = parseIntInRange(rateAuthSessionRaw, defaultRateAuthSession, 1, 100000);
-
-    const defaultAuthFailWindowMs = parseIntInRange(existing.AUTH_FAIL_WINDOW_MS, 10 * 60 * 1000, 1000, 24 * 60 * 60 * 1000);
-    const authFailWindowRaw = await rl.question(`Auth failure window (ms) [${defaultAuthFailWindowMs}]: `);
-    const authFailWindowMs = parseIntInRange(authFailWindowRaw, defaultAuthFailWindowMs, 1000, 24 * 60 * 60 * 1000);
-
-    const defaultAuthFailThreshold = parseIntInRange(existing.AUTH_FAIL_THRESHOLD, 5, 1, 1000);
-    const authFailThresholdRaw = await rl.question(`Auth failure threshold [${defaultAuthFailThreshold}]: `);
-    const authFailThreshold = parseIntInRange(authFailThresholdRaw, defaultAuthFailThreshold, 1, 1000);
-
-    const defaultAuthLockoutMs = parseIntInRange(existing.AUTH_LOCKOUT_MS, 15 * 60 * 1000, 1000, 24 * 60 * 60 * 1000);
-    const authLockoutRaw = await rl.question(`Auth lockout duration (ms) [${defaultAuthLockoutMs}]: `);
-    const authLockoutMs = parseIntInRange(authLockoutRaw, defaultAuthLockoutMs, 1000, 24 * 60 * 60 * 1000);
-
-    const defaultAuthBackoffBaseMs = parseIntInRange(existing.AUTH_BACKOFF_BASE_MS, 250, 0, 60000);
-    const authBackoffBaseRaw = await rl.question(`Auth backoff base (ms) [${defaultAuthBackoffBaseMs}]: `);
-    const authBackoffBaseMs = parseIntInRange(authBackoffBaseRaw, defaultAuthBackoffBaseMs, 0, 60000);
-
-    const defaultAuthBackoffMaxMs = parseIntInRange(existing.AUTH_BACKOFF_MAX_MS, 2000, 0, 60000);
-    const authBackoffMaxRaw = await rl.question(`Auth backoff max (ms) [${defaultAuthBackoffMaxMs}]: `);
-    const authBackoffMaxMs = parseIntInRange(authBackoffMaxRaw, defaultAuthBackoffMaxMs, 0, 60000);
-
-    const defaultAuthBackoffStartAfter = parseIntInRange(existing.AUTH_BACKOFF_START_AFTER, 2, 1, 1000);
-    const authBackoffStartAfterRaw = await rl.question(`Auth backoff start after failures [${defaultAuthBackoffStartAfter}]: `);
-    const authBackoffStartAfter = parseIntInRange(authBackoffStartAfterRaw, defaultAuthBackoffStartAfter, 1, 1000);
-
-    if (authBackoffBaseMs > authBackoffMaxMs) {
-      throw new Error('Auth backoff base must be less than or equal to auth backoff max.');
-    }
-
-    const defaultAuthGuardMaxEntries = parseIntInRange(existing.AUTH_GUARD_MAX_ENTRIES, 20000, 100, 1000000);
-    const authGuardMaxEntriesRaw = await rl.question(`Auth guard max entries [${defaultAuthGuardMaxEntries}]: `);
-    const authGuardMaxEntries = parseIntInRange(authGuardMaxEntriesRaw, defaultAuthGuardMaxEntries, 100, 1000000);
-
-    let trustProxy = '0';
-    if (allowLan === '1') {
-      trustProxy = '0';
-    } else {
-      const defaultTrustProxy = sanitizeValue(existing.JOBLIO_TRUST_PROXY || '0') === '1';
-      const trustProxyRaw = await rl.question(`Trust proxy headers for client IP? (${defaultTrustProxy ? 'Y/n' : 'y/N'}): `);
-      trustProxy = parseBoolText(trustProxyRaw, defaultTrustProxy) ? '1' : '0';
-    }
-
-    const defaultAllowlist = sanitizeValue(existing.JOBLIO_IP_ALLOWLIST || '');
-    const allowlistPrompt = allowLan === '1'
-      ? `IP allowlist CSV (required in LAN mode, e.g. 192.168.1.0/24) [${defaultAllowlist || 'required'}]: `
-      : `IP allowlist CSV (blank to disable) [${defaultAllowlist || 'disabled'}]: `;
-    const allowlistRaw = await rl.question(allowlistPrompt);
-    const ipAllowlist = sanitizeValue(allowlistRaw || defaultAllowlist);
-    const parsedAllowlist = parseAllowlist(ipAllowlist);
-    if (allowLan === '1' && !parsedAllowlist.length) {
-      throw new Error('LAN mode requires a non-empty IP allowlist.');
-    }
-    if (allowLan === '1' && parsedAllowlist.length && !hasNonLoopbackAllowlistEntry(parsedAllowlist)) {
-      throw new Error('LAN mode requires at least one non-loopback IP allowlist entry.');
-    }
-    if (allowLan === '1') {
-      const unsafeEntry = parsedAllowlist.find((entry) => !isSafeAllowlistEntry(entry));
-      if (unsafeEntry) {
-        throw new Error(`Unsafe IP allowlist entry for LAN mode: ${unsafeEntry}`);
-      }
-    }
-
-    const defaultResumeTemplates = sanitizeValue(existing.JOBLIO_RESUME_TEMPLATES || '');
-    const resumeTemplatesRaw = await rl.question(`Resume template file paths CSV under templates/resume (blank disables) [${defaultResumeTemplates || 'disabled'}]: `);
-    const resumeTemplates = sanitizeValue(resumeTemplatesRaw || defaultResumeTemplates);
-    const templateCheck = validateTemplateConfig(resumeTemplates, resumeTemplateRoot, { requireExisting: true, maxBytes: 10 * 1024 * 1024 });
-    if (templateCheck.issues.length) {
-      throw new Error(templateCheck.issues.join('; '));
-    }
-
-    return {
-      skip: false,
-      allowLan,
-      host,
-      port,
-      user,
-      passwordHash,
-      runtimeDataDir,
-      backupDir,
-      certPath,
-      keyPath,
-      rateMaxAuthSession,
-      authFailWindowMs,
-      authFailThreshold,
-      authLockoutMs,
-      authBackoffBaseMs,
-      authBackoffMaxMs,
-      authBackoffStartAfter,
-      authGuardMaxEntries,
-      trustProxy,
-      ipAllowlist,
-      resumeTemplates,
-      apiToken: sanitizeValue(existing.JOBLIO_API_TOKEN || randHex(32)),
-      auditKey: sanitizeValue(existing.JOBLIO_AUDIT_KEY || randHex(32)),
-    };
-  } finally {
-    rl.close();
+  const forceEdit = Boolean(options.forceEdit);
+  const exists = Boolean(existing && Object.keys(existing).length > 0);
+  if (exists && !forceEdit) {
+    const shouldUpdate = await promptConfirm('Existing config found. Update it?', false);
+    if (!shouldUpdate) return { skip: true };
   }
+
+  const defaultUser = sanitizeValue(existing.JOBLIO_BASIC_AUTH_USER || 'joblio');
+  const userInput = await promptText('Basic auth username', defaultUser);
+  const user = sanitizeValue(userInput || defaultUser) || 'joblio';
+
+  const hasExistingHash = String(existing.JOBLIO_BASIC_AUTH_HASH || '').startsWith('scrypt$');
+  const passLabel = hasExistingHash
+    ? 'Basic auth password (leave blank to keep existing)'
+    : 'Basic auth password (min 8 chars, include letter + number + symbol)';
+  let pass = await promptHidden(passLabel);
+  let useExistingHash = false;
+  if (!pass && hasExistingHash) {
+    useExistingHash = true;
+  }
+
+  let passwordHash = sanitizeValue(existing.JOBLIO_BASIC_AUTH_HASH || '');
+  if (!useExistingHash) {
+    let pass2 = await promptHidden('Confirm password');
+    if (pass !== pass2) throw new Error('Password confirmation did not match.');
+    validatePasswordStrength(pass);
+    passwordHash = createPasswordHash(pass);
+    pass2 = '';
+  }
+  pass = '';
+
+  const defaultAllowLan = sanitizeValue(existing.JOBLIO_ALLOW_LAN || '0') === '1';
+  const allowLan = (await promptConfirm('Allow LAN access from other local devices?', defaultAllowLan)) ? '1' : '0';
+
+  let host = '127.0.0.1';
+  if (allowLan === '1') {
+    const defaultLanHost = sanitizeValue(existing.HOST || '');
+    const lanHostRaw = await promptText('LAN bind host (private interface IP, not 0.0.0.0)', defaultLanHost);
+    host = sanitizeValue(lanHostRaw || defaultLanHost);
+    if (!host) throw new Error('LAN bind host is required when LAN mode is enabled.');
+    if (isWildcardHost(host)) throw new Error('Wildcard bind host is not allowed in LAN mode.');
+    if (!isPrivateOrLoopbackHost(host)) throw new Error(`LAN bind host must be private/loopback. Got: ${host}`);
+    if (isLoopbackHost(host)) {
+      throw new Error('LAN mode requires a non-loopback private interface IP to be reachable from other devices.');
+    }
+  }
+
+  const defaultPort = parsePort(existing.PORT, 8787);
+  const portRaw = await promptText('Port', String(defaultPort));
+  const port = parsePort(portRaw, defaultPort);
+
+  const defaultDataDir = sanitizeValue(existing.JOBLIO_DATA_DIR || path.join(root, '.joblio-data'));
+  const dataDirRaw = await promptText('Storage data directory', defaultDataDir);
+  const runtimeDataDir = sanitizeValue(dataDirRaw || defaultDataDir);
+  if (!runtimeDataDir) throw new Error('Storage data directory is required.');
+
+  const defaultBackupDir = sanitizeValue(existing.JOBLIO_BACKUP_DIR || path.join(root, 'backups'));
+  const backupDirRaw = await promptText('Backup directory', defaultBackupDir);
+  const backupDir = sanitizeValue(backupDirRaw || defaultBackupDir);
+  if (!backupDir) throw new Error('Backup directory is required.');
+
+  const defaultTlsCertPath = sanitizeValue(existing.JOBLIO_TLS_CERT_PATH || path.join(runtimeDataDir, 'tls', 'localhost-cert.pem'));
+  const defaultTlsKeyPath = sanitizeValue(existing.JOBLIO_TLS_KEY_PATH || path.join(runtimeDataDir, 'tls', 'localhost-key.pem'));
+  const certPathRaw = await promptText('TLS cert path', defaultTlsCertPath);
+  const keyPathRaw = await promptText('TLS key path', defaultTlsKeyPath);
+  const certPath = sanitizeValue(certPathRaw || defaultTlsCertPath);
+  const keyPath = sanitizeValue(keyPathRaw || defaultTlsKeyPath);
+
+  if (!certPath || !keyPath) {
+    throw new Error('TLS cert and key paths are required.');
+  }
+  if (!fs.existsSync(path.resolve(certPath))) {
+    throw new Error(`TLS cert not found: ${certPath}`);
+  }
+  if (!fs.existsSync(path.resolve(keyPath))) {
+    throw new Error(`TLS key not found: ${keyPath}`);
+  }
+
+  const defaultRateAuthSession = parseIntInRange(existing.RATE_MAX_AUTH_SESSION, 45, 1, 100000);
+  const rateAuthSessionRaw = await promptText('Auth session rate limit per window', String(defaultRateAuthSession));
+  const rateMaxAuthSession = parseIntInRange(rateAuthSessionRaw, defaultRateAuthSession, 1, 100000);
+
+  const defaultAuthFailWindowMs = parseIntInRange(existing.AUTH_FAIL_WINDOW_MS, 10 * 60 * 1000, 1000, 24 * 60 * 60 * 1000);
+  const authFailWindowRaw = await promptText('Auth failure window (ms)', String(defaultAuthFailWindowMs));
+  const authFailWindowMs = parseIntInRange(authFailWindowRaw, defaultAuthFailWindowMs, 1000, 24 * 60 * 60 * 1000);
+
+  const defaultAuthFailThreshold = parseIntInRange(existing.AUTH_FAIL_THRESHOLD, 5, 1, 1000);
+  const authFailThresholdRaw = await promptText('Auth failure threshold', String(defaultAuthFailThreshold));
+  const authFailThreshold = parseIntInRange(authFailThresholdRaw, defaultAuthFailThreshold, 1, 1000);
+
+  const defaultAuthLockoutMs = parseIntInRange(existing.AUTH_LOCKOUT_MS, 15 * 60 * 1000, 1000, 24 * 60 * 60 * 1000);
+  const authLockoutRaw = await promptText('Auth lockout duration (ms)', String(defaultAuthLockoutMs));
+  const authLockoutMs = parseIntInRange(authLockoutRaw, defaultAuthLockoutMs, 1000, 24 * 60 * 60 * 1000);
+
+  const defaultAuthBackoffBaseMs = parseIntInRange(existing.AUTH_BACKOFF_BASE_MS, 250, 0, 60000);
+  const authBackoffBaseRaw = await promptText('Auth backoff base (ms)', String(defaultAuthBackoffBaseMs));
+  const authBackoffBaseMs = parseIntInRange(authBackoffBaseRaw, defaultAuthBackoffBaseMs, 0, 60000);
+
+  const defaultAuthBackoffMaxMs = parseIntInRange(existing.AUTH_BACKOFF_MAX_MS, 2000, 0, 60000);
+  const authBackoffMaxRaw = await promptText('Auth backoff max (ms)', String(defaultAuthBackoffMaxMs));
+  const authBackoffMaxMs = parseIntInRange(authBackoffMaxRaw, defaultAuthBackoffMaxMs, 0, 60000);
+
+  const defaultAuthBackoffStartAfter = parseIntInRange(existing.AUTH_BACKOFF_START_AFTER, 2, 1, 1000);
+  const authBackoffStartAfterRaw = await promptText('Auth backoff start after failures', String(defaultAuthBackoffStartAfter));
+  const authBackoffStartAfter = parseIntInRange(authBackoffStartAfterRaw, defaultAuthBackoffStartAfter, 1, 1000);
+
+  if (authBackoffBaseMs > authBackoffMaxMs) {
+    throw new Error('Auth backoff base must be less than or equal to auth backoff max.');
+  }
+
+  const defaultAuthGuardMaxEntries = parseIntInRange(existing.AUTH_GUARD_MAX_ENTRIES, 20000, 100, 1000000);
+  const authGuardMaxEntriesRaw = await promptText('Auth guard max entries', String(defaultAuthGuardMaxEntries));
+  const authGuardMaxEntries = parseIntInRange(authGuardMaxEntriesRaw, defaultAuthGuardMaxEntries, 100, 1000000);
+
+  let trustProxy = '0';
+  if (allowLan === '1') {
+    trustProxy = '0';
+  } else {
+    const defaultTrustProxy = sanitizeValue(existing.JOBLIO_TRUST_PROXY || '0') === '1';
+    trustProxy = (await promptConfirm('Trust proxy headers for client IP?', defaultTrustProxy)) ? '1' : '0';
+  }
+
+  const defaultAllowlist = sanitizeValue(existing.JOBLIO_IP_ALLOWLIST || '');
+  const allowlistMessage = allowLan === '1'
+    ? 'IP allowlist CSV (required in LAN mode, e.g. 192.168.1.0/24)'
+    : 'IP allowlist CSV (blank to disable)';
+  const allowlistRaw = await promptText(allowlistMessage, defaultAllowlist);
+  const ipAllowlist = sanitizeValue(allowlistRaw || defaultAllowlist);
+  const parsedAllowlist = parseAllowlist(ipAllowlist);
+  if (allowLan === '1' && !parsedAllowlist.length) {
+    throw new Error('LAN mode requires a non-empty IP allowlist.');
+  }
+  if (allowLan === '1' && parsedAllowlist.length && !hasNonLoopbackAllowlistEntry(parsedAllowlist)) {
+    throw new Error('LAN mode requires at least one non-loopback IP allowlist entry.');
+  }
+  if (allowLan === '1') {
+    const unsafeEntry = parsedAllowlist.find((entry) => !isSafeAllowlistEntry(entry));
+    if (unsafeEntry) {
+      throw new Error(`Unsafe IP allowlist entry for LAN mode: ${unsafeEntry}`);
+    }
+  }
+
+  const defaultResumeTemplates = sanitizeValue(existing.JOBLIO_RESUME_TEMPLATES || '');
+  const resumeTemplatesRaw = await promptText('Resume template file paths CSV under templates/resume (blank disables)', defaultResumeTemplates);
+  const resumeTemplates = sanitizeValue(resumeTemplatesRaw || defaultResumeTemplates);
+  const templateCheck = validateTemplateConfig(resumeTemplates, resumeTemplateRoot, { requireExisting: true, maxBytes: 10 * 1024 * 1024 });
+  if (templateCheck.issues.length) {
+    throw new Error(templateCheck.issues.join('; '));
+  }
+
+  return {
+    skip: false,
+    allowLan,
+    host,
+    port,
+    user,
+    passwordHash,
+    runtimeDataDir,
+    backupDir,
+    certPath,
+    keyPath,
+    rateMaxAuthSession,
+    authFailWindowMs,
+    authFailThreshold,
+    authLockoutMs,
+    authBackoffBaseMs,
+    authBackoffMaxMs,
+    authBackoffStartAfter,
+    authGuardMaxEntries,
+    trustProxy,
+    ipAllowlist,
+    resumeTemplates,
+    apiToken: sanitizeValue(existing.JOBLIO_API_TOKEN || randHex(32)),
+    auditKey: sanitizeValue(existing.JOBLIO_AUDIT_KEY || randHex(32)),
+  };
 }
 
 async function writeConfig(result) {
