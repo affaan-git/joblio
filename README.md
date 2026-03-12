@@ -64,7 +64,7 @@ npm start
 ```
 
 Then open the HTTPS URL printed in your terminal and sign in with your configured Basic Auth credentials.
-Joblio is intended for local machine use by default. Optional guarded LAN mode can be enabled during setup.
+Joblio is intended for local machine use by default. Optional LAN mode requiring explicit allowlist enforcement can be enabled during setup.
 
 ### Security First
 
@@ -418,7 +418,7 @@ These keys are written by setup and used at runtime.
 
 | Key | Default | Purpose |
 | --- | --- | --- |
-| `JOBLIO_ALLOW_LAN` | `0` | Enable guarded LAN mode (`1` = on) |
+| `JOBLIO_ALLOW_LAN` | `0` | Enable LAN mode (`1` = on, requires explicit IP allowlist) |
 | `HOST` | `127.0.0.1` | Bind host (loopback by default; private host required in LAN mode) |
 | `PORT` | `8787` | Bind port |
 | `JOBLIO_API_TOKEN` | random | Session signing/encryption secret |
@@ -473,7 +473,7 @@ These are server-supported keys (advanced operations) that are not currently pro
 | `AUTH_BACKOFF_MAX_MS` | `2000` | Backoff max delay |
 | `AUTH_BACKOFF_START_AFTER` | `2` | Backoff starts after this many failures |
 | `AUTH_GUARD_MAX_ENTRIES` | `20000` | Auth guard entry cap |
-| `JOBLIO_ALLOW_LAN` | `0` | Enable guarded LAN mode |
+| `JOBLIO_ALLOW_LAN` | `0` | Enable LAN mode (requires explicit IP allowlist) |
 | `JOBLIO_TRUST_PROXY` | `0` | Trust `X-Forwarded-For` |
 | `JOBLIO_IP_ALLOWLIST` | empty | Allowed IPs/CIDRs (CSV) |
 | `JOBLIO_RESUME_TEMPLATES` | empty | CSV template paths under `templates/resume` |
