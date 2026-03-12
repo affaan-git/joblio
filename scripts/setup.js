@@ -8,6 +8,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const readline = require('node:readline/promises');
 const { stdin, stdout } = require('node:process');
+const prompts = require('prompts');
 const { createPasswordHash } = require('../lib/auth');
 const { parseEnvText } = require('../lib/env-file');
 const { isLoopbackHost, isPrivateOrLoopbackHost, isWildcardHost } = require('../lib/network-policy');
@@ -74,49 +75,25 @@ async function promptHidden(promptText, options = {}) {
     throw new Error('Interactive setup requires a TTY terminal.');
   }
   const rl = options.rl || null;
-  return new Promise((resolve, reject) => {
-    const input = stdin;
-    const output = stdout;
-    let value = '';
-    let cleaned = false;
-
-    const cleanup = () => {
-      if (cleaned) return;
-      cleaned = true;
-      input.removeListener('data', onData);
-      try { input.setRawMode(false); } catch {}
-      input.pause();
-      if (rl && typeof rl.resume === 'function') rl.resume();
-    };
-
-    if (rl && typeof rl.pause === 'function') rl.pause();
-    output.write(promptText);
-    input.setRawMode(true);
-    input.resume();
-    input.setEncoding('utf8');
-
-    const onData = (char) => {
-      if (char === '\u0003') {
-        cleanup();
-        output.write('\n');
-        reject(new Error('Setup cancelled by user.'));
-        return;
-      }
-      if (char === '\r' || char === '\n') {
-        cleanup();
-        output.write('\n');
-        resolve(value);
-        return;
-      }
-      if (char === '\u007f' || char === '\b' || char === '\u0008') {
-        value = value.slice(0, -1);
-        return;
-      }
-      value += char;
-    };
-
-    input.on('data', onData);
-  });
+  if (rl && typeof rl.pause === 'function') rl.pause();
+  try {
+    const message = String(promptText || '').replace(/:\s*$/, '');
+    const answer = await prompts({
+      type: 'password',
+      name: 'value',
+      message,
+    }, {
+      onCancel: () => {
+        throw new Error('Setup cancelled by user.');
+      },
+    });
+    if (!answer || typeof answer.value !== 'string') {
+      throw new Error('Setup cancelled by user.');
+    }
+    return answer.value;
+  } finally {
+    if (rl && typeof rl.resume === 'function') rl.resume();
+  }
 }
 
 async function askInteractive(existing, options = {}) {
