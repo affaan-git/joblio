@@ -274,6 +274,9 @@
     }
 
     .right {
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
       overflow-y: auto;
       background: linear-gradient(180deg, var(--bg), var(--bg-panel));
     }
@@ -520,8 +523,10 @@
     button.pill { cursor: pointer; }
 
     .detail {
+      min-height: 100%;
+      box-sizing: border-box;
       max-width: 1080px;
-      padding: 0.78rem 0.95rem 0.9rem;
+      padding: 0.78rem 0.95rem calc(0.9rem - 1px);
       display: grid;
       gap: 0.62rem;
     }
