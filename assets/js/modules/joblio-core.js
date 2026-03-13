@@ -115,7 +115,7 @@ export function initJoblio() {
     let serverTimeZone = "UTC";
     let serverNowIso = "";
     let resumeTemplatesAvailable = false;
-    const MOBILE_LAYOUT_QUERY = "(max-width: 760px)";
+    const MOBILE_LAYOUT_QUERY = "(max-width: 760px), (orientation: landscape) and (max-height: 520px)";
     const MOBILE_VIEW_KEY = "joblio-mobile-view";
     const savedMobileView = localStorage.getItem(MOBILE_VIEW_KEY);
     if (savedMobileView === "list" || savedMobileView === "detail") {

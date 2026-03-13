@@ -21,6 +21,7 @@
 
     html {
       height: 100%;
+      color-scheme: dark;
     }
 
     body.theme-light {
@@ -40,6 +41,7 @@
       --brand-icon-bg-start: #dbe4f2;
       --brand-icon-bg-end: #eef3fb;
       --brand-icon-fg: #1f2937;
+      color-scheme: light;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -998,6 +1000,8 @@
       display: none;
       align-items: center;
       justify-content: center;
+      padding: 0.8rem;
+      overflow: auto;
       z-index: 20;
     }
 
@@ -1009,6 +1013,8 @@
       border: 1px solid var(--border);
       border-radius: 14px;
       padding: 0.95rem;
+      max-height: calc(100dvh - 1.6rem);
+      overflow: auto;
       display: grid;
       gap: 0.72rem;
       animation: menu-in 0.14s ease;
@@ -1093,7 +1099,7 @@
       .center-controls { grid-template-columns: minmax(0, 1fr) 150px 104px; }
     }
 
-    @media (max-width: 760px) {
+    @media (max-width: 760px), (orientation: landscape) and (max-height: 520px) {
       .top-bar {
         grid-template-columns: 1fr;
         gap: 0.42rem;
