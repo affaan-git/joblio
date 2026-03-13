@@ -1103,22 +1103,36 @@
       .top-bar {
         grid-template-columns: 1fr;
         gap: 0.42rem;
-        padding: 0.55rem 0.72rem;
-        position: relative;
+        padding: calc(env(safe-area-inset-top) + 0.55rem) 0.72rem 0.55rem;
+        position: sticky;
+        top: 0;
+        z-index: 45;
+        background: var(--bg-elevated);
       }
       .brand {
         justify-content: flex-start;
         padding-right: 2.3rem;
       }
+      body.mobile-detail-view .brand {
+        visibility: hidden;
+      }
       .top-actions {
         position: absolute;
-        top: 0.55rem;
+        top: calc(env(safe-area-inset-top) + 0.55rem);
         right: 0.72rem;
         justify-content: flex-end;
         gap: 0.25rem;
       }
+      body.mobile-detail-view .top-actions {
+        left: 0.72rem;
+        right: 0.72rem;
+        justify-content: space-between;
+      }
       .center-controls {
         grid-template-columns: 1fr;
+      }
+      body.mobile-detail-view .center-controls {
+        display: none;
       }
       #sortSelect,
       #filtersBtn,
@@ -1175,6 +1189,10 @@
       }
       .mobile-back-btn.show {
         display: inline-flex;
+        margin-right: auto;
+      }
+      body.mobile-list-view .mobile-back-btn {
+        display: none !important;
       }
       .top-actions #newBtn {
         display: none !important;

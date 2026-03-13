@@ -141,6 +141,7 @@ export function initJoblio() {
       if (!layoutEl) return;
       if (!isMobileLayout()) {
         layoutEl.classList.remove("mobile-list", "mobile-detail");
+        document.body.classList.remove("mobile-list-view", "mobile-detail-view");
         if (mobileBackBtn) mobileBackBtn.classList.remove("show");
         if (mobileToolsBtn) mobileToolsBtn.classList.remove("show");
         if (mobileNewFab) mobileNewFab.classList.remove("show");
@@ -153,6 +154,8 @@ export function initJoblio() {
       const mode = state.mobileView === "detail" && state.activeId ? "detail" : "list";
       layoutEl.classList.toggle("mobile-list", mode === "list");
       layoutEl.classList.toggle("mobile-detail", mode === "detail");
+      document.body.classList.toggle("mobile-list-view", mode === "list");
+      document.body.classList.toggle("mobile-detail-view", mode === "detail");
       if (mobileBackBtn) {
         mobileBackBtn.classList.toggle("show", mode === "detail");
       }
@@ -797,7 +800,8 @@ export function initJoblio() {
 
       listEl.innerHTML = apps
         .map((app) => {
-          const active = app.id === state.activeId ? " active" : "";
+          const showActive = app.id === state.activeId && !(isMobileLayout() && state.mobileView === "list");
+          const active = showActive ? " active" : "";
           const overdue = isOverdueDate(app.nextFollowUpAt);
           return `
             <article class="card${active}" data-id="${escapeHtml(app.id)}">
