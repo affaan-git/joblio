@@ -1243,9 +1243,15 @@
       .layout.mobile-list {
         background: var(--bg-panel);
       }
+      .layout.mobile-detail {
+        background: linear-gradient(180deg, var(--bg), var(--bg-panel));
+      }
       .layout.mobile-list .left {
         background: var(--bg-panel);
         min-height: 100%;
+      }
+      .layout.mobile-detail .right {
+        background: transparent;
       }
       .layout.mobile-detail .left { display: none; }
       .mobile-detail-actions {
