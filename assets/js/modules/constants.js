@@ -24,6 +24,8 @@ export function createInitialState() {
   return {
     apps: [],
     activeId: null,
+    mobileView: "list",
+    scrollListToActive: false,
     pendingDescriptionFocusId: null,
     search: "",
     sortBy: "recent_update",

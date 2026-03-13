@@ -54,9 +54,27 @@
           </div>
         </div>
       </div>
+      <div class="mobile-filter-chips">
+        <select id="mobileSortInline"></select>
+        <select id="mobileStatusInline"></select>
+        <select id="mobileModeInline"></select>
+      </div>
     </div>
 
     <div class="top-actions">
+      <button id="mobileBackBtn" class="btn mobile-back-btn" title="Back to applications">← Back</button>
+      <div class="action-menu-wrap">
+        <button id="mobileToolsBtn" class="btn mobile-tools-btn" title="More tools">⋯</button>
+        <div id="mobileToolsMenu" class="action-menu">
+          <button id="mobileHealthBtn">Health</button>
+          <button id="mobileTrashBtn">Trash</button>
+          <button id="mobileThemeBtn">Theme</button>
+          <button id="mobileExportBtn">Export JSON</button>
+          <button id="mobileImportBtn">Import JSON</button>
+          <button id="mobileTemplateBtn">Resume template</button>
+          <button id="mobileRevokeBtn">Revoke all sessions</button>
+        </div>
+      </div>
       <div id="backendHealth" class="health-pill disconnected" title="Backend status">
         <span class="health-dot"></span>
         <span id="backendHealthText">Offline</span>
@@ -99,6 +117,8 @@
       <div class="detail" id="detail"></div>
     </section>
   </main>
+
+  <button id="mobileNewFab" class="mobile-new-fab" type="button" aria-label="Create new application">+ New</button>
 
   <div class="dialog-wrap" id="newDialog">
     <div class="dialog">

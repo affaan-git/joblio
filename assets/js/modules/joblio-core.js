@@ -31,6 +31,12 @@ export function initJoblio() {
     const state = createInitialState();
     const {
       topBar,
+      mobileBackBtn,
+      mobileToolsBtn,
+      mobileToolsMenu,
+      mobileSortInline,
+      mobileStatusInline,
+      mobileModeInline,
       listEl,
       layoutEl,
       colResizer,
@@ -66,6 +72,7 @@ export function initJoblio() {
       backendBannerText,
       IS_DIRECT_FILE_MODE,
       newBtn,
+      mobileNewFab,
       newDialog,
       newCancel,
       newCreate,
@@ -89,6 +96,13 @@ export function initJoblio() {
       healthDialogBody,
       refreshHealthBtn,
       closeHealthBtn,
+      mobileThemeBtn,
+      mobileHealthBtn,
+      mobileTrashBtn,
+      mobileExportBtn,
+      mobileImportBtn,
+      mobileTemplateBtn,
+      mobileRevokeBtn,
       toastWrap,
     } = getDomRefs();
 
@@ -101,6 +115,12 @@ export function initJoblio() {
     let serverTimeZone = "UTC";
     let serverNowIso = "";
     let resumeTemplatesAvailable = false;
+    const MOBILE_LAYOUT_QUERY = "(max-width: 760px)";
+    const MOBILE_VIEW_KEY = "joblio-mobile-view";
+    const savedMobileView = localStorage.getItem(MOBILE_VIEW_KEY);
+    if (savedMobileView === "list" || savedMobileView === "detail") {
+      state.mobileView = savedMobileView;
+    }
 
     function uid() {
       return `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -111,6 +131,58 @@ export function initJoblio() {
       if (!runtimeLayoutStyle) return;
       const rounded = Math.round(px);
       runtimeLayoutStyle.textContent = `:root{--left-panel-width:${rounded}px;}`;
+    }
+
+    function isMobileLayout() {
+      return window.matchMedia(MOBILE_LAYOUT_QUERY).matches;
+    }
+
+    function syncMobileLayoutMode() {
+      if (!layoutEl) return;
+      if (!isMobileLayout()) {
+        layoutEl.classList.remove("mobile-list", "mobile-detail");
+        if (mobileBackBtn) mobileBackBtn.classList.remove("show");
+        if (mobileToolsBtn) mobileToolsBtn.classList.remove("show");
+        if (mobileNewFab) mobileNewFab.classList.remove("show");
+        closeMobileToolsMenu();
+        return;
+      }
+      if (!state.activeId) {
+        state.mobileView = "list";
+      }
+      const mode = state.mobileView === "detail" && state.activeId ? "detail" : "list";
+      layoutEl.classList.toggle("mobile-list", mode === "list");
+      layoutEl.classList.toggle("mobile-detail", mode === "detail");
+      if (mobileBackBtn) {
+        mobileBackBtn.classList.toggle("show", mode === "detail");
+      }
+      if (mobileToolsBtn) {
+        mobileToolsBtn.classList.add("show");
+      }
+      if (mobileNewFab) {
+        mobileNewFab.classList.toggle("show", mode === "list");
+      }
+      localStorage.setItem(MOBILE_VIEW_KEY, mode);
+    }
+
+    function openMobileToolsMenu() {
+      if (!mobileToolsMenu) return;
+      mobileToolsMenu.classList.add("open");
+    }
+
+    function closeMobileToolsMenu() {
+      if (!mobileToolsMenu) return;
+      mobileToolsMenu.classList.remove("open");
+    }
+
+    function syncMobileInlineFilters() {
+      if (!mobileSortInline || !mobileStatusInline || !mobileModeInline) return;
+      mobileSortInline.innerHTML = sortSelect.innerHTML;
+      mobileStatusInline.innerHTML = statusFilter.innerHTML;
+      mobileModeInline.innerHTML = modeFilter.innerHTML;
+      mobileSortInline.value = state.sortBy;
+      mobileStatusInline.value = state.statusFilter;
+      mobileModeInline.value = state.modeFilter;
     }
 
     function isOverdueDate(dateStr) {
@@ -197,6 +269,9 @@ export function initJoblio() {
       themeToggle.textContent = toDark ? "☾" : "☀";
       themeToggle.title = toDark ? "Switch to dark mode" : "Switch to light mode";
       themeToggle.setAttribute("aria-label", toDark ? "Switch to dark mode" : "Switch to light mode");
+      if (mobileThemeBtn) {
+        mobileThemeBtn.textContent = toDark ? "Dark mode" : "Light mode";
+      }
     }
 
     function showToast(message, type = "") {
@@ -397,6 +472,13 @@ export function initJoblio() {
       resumeTemplateBtn.title = resumeTemplatesAvailable
         ? "Download configured resume template(s)"
         : (reason || "No resume templates configured");
+      if (mobileTemplateBtn) {
+        mobileTemplateBtn.disabled = !resumeTemplatesAvailable;
+        mobileTemplateBtn.setAttribute("aria-disabled", String(!resumeTemplatesAvailable));
+        mobileTemplateBtn.title = resumeTemplatesAvailable
+          ? "Download configured resume template(s)"
+          : (reason || "No resume templates configured");
+      }
     }
 
     async function refreshResumeTemplateAvailability() {
@@ -723,6 +805,9 @@ export function initJoblio() {
       listEl.querySelectorAll(".card").forEach((card) => {
         card.addEventListener("click", () => {
           state.activeId = card.dataset.id;
+          if (isMobileLayout()) {
+            state.mobileView = "detail";
+          }
           persist();
           render();
         });
@@ -749,6 +834,16 @@ export function initJoblio() {
           moveAppToTrash(appId);
         });
       });
+
+      if (state.scrollListToActive && state.activeId) {
+        state.scrollListToActive = false;
+        requestAnimationFrame(() => {
+          const activeCard = listEl.querySelector(`.card[data-id="${CSS.escape(state.activeId)}"]`);
+          if (activeCard) {
+            activeCard.scrollIntoView({ block: "center", behavior: "smooth" });
+          }
+        });
+      }
     }
 
     function updateField(app, key, value) {
@@ -926,6 +1021,11 @@ export function initJoblio() {
               </div>
             </div>
           </section>
+        </div>
+        <div class="mobile-detail-actions">
+          <button id="mobileDetailStatusBtn" class="btn">Update status</button>
+          <button id="mobileDetailLinksBtn" class="btn">Open link</button>
+          <button id="mobileDetailDeleteBtn" class="btn">Delete</button>
         </div>
       `;
 
@@ -1116,12 +1216,49 @@ export function initJoblio() {
         if (!confirmed) return;
         moveAppToTrash(app.id);
       });
+
+      const openBestLink = () => {
+        const rawUrl = String(app.applicationUrl || app.jobUrl || "").trim();
+        if (!rawUrl) {
+          showToast("No link available for this application.", "warn");
+          return;
+        }
+        try {
+          const parsed = new URL(rawUrl);
+          if (!["http:", "https:"].includes(parsed.protocol)) {
+            showToast("Invalid link protocol.", "error");
+            return;
+          }
+          window.open(parsed.toString(), "_blank", "noopener,noreferrer");
+        } catch {
+          showToast("Invalid link format.", "error");
+        }
+      };
+
+      const mobileStatusBtn = document.getElementById("mobileDetailStatusBtn");
+      const mobileLinksBtn = document.getElementById("mobileDetailLinksBtn");
+      const mobileDeleteBtn = document.getElementById("mobileDetailDeleteBtn");
+      if (mobileStatusBtn) {
+        mobileStatusBtn.addEventListener("click", () => openStatusDialog(app.id, "update"));
+      }
+      if (mobileLinksBtn) {
+        mobileLinksBtn.addEventListener("click", openBestLink);
+      }
+      if (mobileDeleteBtn) {
+        mobileDeleteBtn.addEventListener("click", () => {
+          const confirmed = window.confirm("Move this application to trash?");
+          if (!confirmed) return;
+          moveAppToTrash(app.id);
+        });
+      }
     }
 
     function render() {
       renderFilters();
+      syncMobileInlineFilters();
       renderList();
       renderDetail();
+      syncMobileLayoutMode();
       if (searchWrap.classList.contains("open")) renderSearchPopover();
     }
 
@@ -1158,6 +1295,9 @@ export function initJoblio() {
 
       state.apps.unshift(app);
       state.activeId = app.id;
+      if (isMobileLayout()) {
+        state.mobileView = "detail";
+      }
       state.pendingDescriptionFocusId = sourceText ? null : app.id;
       persist();
       closeNewDialog();
@@ -1286,12 +1426,39 @@ export function initJoblio() {
       render();
     });
 
+    if (mobileSortInline) {
+      mobileSortInline.addEventListener("change", (e) => {
+        state.sortBy = e.target.value;
+        render();
+      });
+    }
+    if (mobileStatusInline) {
+      mobileStatusInline.addEventListener("change", (e) => {
+        state.statusFilter = e.target.value;
+        render();
+      });
+    }
+    if (mobileModeInline) {
+      mobileModeInline.addEventListener("change", (e) => {
+        state.modeFilter = e.target.value;
+        render();
+      });
+    }
+
     themeToggle.addEventListener("click", () => {
       state.theme = state.theme === "light" ? "dark" : "light";
       document.body.classList.toggle("theme-light", state.theme === "light");
       syncThemeLabel();
       persist();
     });
+    if (mobileThemeBtn) {
+      mobileThemeBtn.addEventListener("click", () => {
+        state.theme = state.theme === "light" ? "dark" : "light";
+        document.body.classList.toggle("theme-light", state.theme === "light");
+        syncThemeLabel();
+        persist();
+      });
+    }
 
     dataBtn.addEventListener("click", async (e) => {
       e.stopPropagation();
@@ -1338,6 +1505,42 @@ export function initJoblio() {
       dataMenu.classList.remove("open");
       await openHealthDialog();
     });
+    if (mobileHealthBtn) {
+      mobileHealthBtn.addEventListener("click", async () => {
+        closeMobileToolsMenu();
+        await openHealthDialog();
+      });
+    }
+    if (mobileTrashBtn) {
+      mobileTrashBtn.addEventListener("click", () => {
+        closeMobileToolsMenu();
+        openTrashDialog();
+      });
+    }
+    if (mobileExportBtn) {
+      mobileExportBtn.addEventListener("click", () => {
+        closeMobileToolsMenu();
+        exportTrackerData();
+      });
+    }
+    if (mobileImportBtn) {
+      mobileImportBtn.addEventListener("click", () => {
+        closeMobileToolsMenu();
+        importInput.click();
+      });
+    }
+    if (mobileTemplateBtn) {
+      mobileTemplateBtn.addEventListener("click", () => {
+        closeMobileToolsMenu();
+        resumeTemplateBtn.click();
+      });
+    }
+    if (mobileRevokeBtn) {
+      mobileRevokeBtn.addEventListener("click", () => {
+        closeMobileToolsMenu();
+        revokeSessionsBtn.click();
+      });
+    }
     resumeTemplateBtn.addEventListener("click", async () => {
       dataMenu.classList.remove("open");
       if (!resumeTemplatesAvailable || resumeTemplateBtn.disabled) return;
@@ -1398,6 +1601,9 @@ export function initJoblio() {
     });
 
     newBtn.addEventListener("click", openNewDialog);
+    if (mobileNewFab) {
+      mobileNewFab.addEventListener("click", openNewDialog);
+    }
     newCancel.addEventListener("click", closeNewDialog);
     newCreate.addEventListener("click", createFromDialog);
     trashBtn.addEventListener("click", openTrashDialog);
@@ -1414,6 +1620,17 @@ export function initJoblio() {
     });
     refreshHealthBtn.addEventListener("click", renderHealthDialog);
     closeHealthBtn.addEventListener("click", closeHealthDialog);
+    if (mobileToolsBtn) {
+      mobileToolsBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const willOpen = !mobileToolsMenu?.classList.contains("open");
+        closeMobileToolsMenu();
+        if (willOpen) {
+          await refreshResumeTemplateAvailability();
+          openMobileToolsMenu();
+        }
+      });
+    }
 
     newDialog.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && e.target.tagName !== "TEXTAREA") {
@@ -1474,8 +1691,10 @@ export function initJoblio() {
     document.addEventListener("pointerdown", (e) => {
       const inData = e.target.closest("#dataBtn, #dataMenu");
       const inFilters = e.target.closest("#filtersBtn, #filtersMenu");
+      const inMobileTools = e.target.closest("#mobileToolsBtn, #mobileToolsMenu");
       if (!inData) dataMenu.classList.remove("open");
       if (!inFilters) filtersMenu.classList.remove("open");
+      if (!inMobileTools) closeMobileToolsMenu();
       if (!e.target.closest(".search-wrap")) closeSearchPopover();
     }, true);
 
@@ -1510,6 +1729,7 @@ export function initJoblio() {
         closeTrashDialog();
         closeNewDialog();
         closeHealthDialog();
+        closeMobileToolsMenu();
       }
     });
 
@@ -1525,11 +1745,47 @@ export function initJoblio() {
       } catch {}
       await hydrate();
       setupColumnResizer();
+      window.addEventListener("resize", () => {
+        syncMobileLayoutMode();
+      });
       render();
       pingBackendHealth();
       if (!IS_DIRECT_FILE_MODE) {
         setInterval(pingBackendHealth, 30000);
       }
     })();
+
+    if (mobileBackBtn) {
+      mobileBackBtn.addEventListener("click", () => {
+        state.mobileView = "list";
+        state.scrollListToActive = true;
+        syncMobileLayoutMode();
+        renderList();
+      });
+    }
+
+    let touchStartX = 0;
+    let touchStartY = 0;
+    document.addEventListener("touchstart", (e) => {
+      if (!isMobileLayout()) return;
+      const touch = e.touches?.[0];
+      if (!touch) return;
+      touchStartX = touch.clientX;
+      touchStartY = touch.clientY;
+    }, { passive: true });
+    document.addEventListener("touchend", (e) => {
+      if (!isMobileLayout()) return;
+      if (state.mobileView !== "detail") return;
+      const touch = e.changedTouches?.[0];
+      if (!touch) return;
+      const dx = touch.clientX - touchStartX;
+      const dy = Math.abs(touch.clientY - touchStartY);
+      if (dx > 90 && dy < 60) {
+        state.mobileView = "list";
+        state.scrollListToActive = true;
+        syncMobileLayoutMode();
+        renderList();
+      }
+    }, { passive: true });
 
 }

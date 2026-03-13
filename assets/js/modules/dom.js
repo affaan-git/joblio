@@ -1,5 +1,11 @@
 export function getDomRefs() {
   const topBar = document.querySelector('.top-bar');
+  const mobileBackBtn = document.getElementById('mobileBackBtn');
+  const mobileToolsBtn = document.getElementById('mobileToolsBtn');
+  const mobileToolsMenu = document.getElementById('mobileToolsMenu');
+  const mobileSortInline = document.getElementById('mobileSortInline');
+  const mobileStatusInline = document.getElementById('mobileStatusInline');
+  const mobileModeInline = document.getElementById('mobileModeInline');
   const listEl = document.getElementById('list');
   const layoutEl = document.querySelector('.layout');
   const colResizer = document.getElementById('colResizer');
@@ -36,6 +42,7 @@ export function getDomRefs() {
   const IS_DIRECT_FILE_MODE = window.location.protocol === 'file:';
 
   const newBtn = document.getElementById('newBtn');
+  const mobileNewFab = document.getElementById('mobileNewFab');
   const newDialog = document.getElementById('newDialog');
   const newCancel = document.getElementById('newCancel');
   const newCreate = document.getElementById('newCreate');
@@ -59,10 +66,23 @@ export function getDomRefs() {
   const healthDialogBody = document.getElementById('healthDialogBody');
   const refreshHealthBtn = document.getElementById('refreshHealthBtn');
   const closeHealthBtn = document.getElementById('closeHealthBtn');
+  const mobileThemeBtn = document.getElementById('mobileThemeBtn');
+  const mobileHealthBtn = document.getElementById('mobileHealthBtn');
+  const mobileTrashBtn = document.getElementById('mobileTrashBtn');
+  const mobileExportBtn = document.getElementById('mobileExportBtn');
+  const mobileImportBtn = document.getElementById('mobileImportBtn');
+  const mobileTemplateBtn = document.getElementById('mobileTemplateBtn');
+  const mobileRevokeBtn = document.getElementById('mobileRevokeBtn');
   const toastWrap = document.getElementById('toastWrap');
 
   return {
     topBar,
+    mobileBackBtn,
+    mobileToolsBtn,
+    mobileToolsMenu,
+    mobileSortInline,
+    mobileStatusInline,
+    mobileModeInline,
     listEl,
     layoutEl,
     colResizer,
@@ -98,6 +118,7 @@ export function getDomRefs() {
     backendBannerText,
     IS_DIRECT_FILE_MODE,
     newBtn,
+    mobileNewFab,
     newDialog,
     newCancel,
     newCreate,
@@ -121,6 +142,13 @@ export function getDomRefs() {
     healthDialogBody,
     refreshHealthBtn,
     closeHealthBtn,
+    mobileThemeBtn,
+    mobileHealthBtn,
+    mobileTrashBtn,
+    mobileExportBtn,
+    mobileImportBtn,
+    mobileTemplateBtn,
+    mobileRevokeBtn,
     toastWrap,
   };
 }
