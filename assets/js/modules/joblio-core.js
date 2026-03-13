@@ -117,6 +117,7 @@ export function initJoblio() {
     let resumeTemplatesAvailable = false;
     const MOBILE_LAYOUT_QUERY = "(max-width: 760px), (orientation: landscape) and (max-height: 520px)";
     const MOBILE_VIEW_KEY = "joblio-mobile-view";
+    let lastMobileScrollY = 0;
     const savedMobileView = localStorage.getItem(MOBILE_VIEW_KEY);
     if (savedMobileView === "list" || savedMobileView === "detail") {
       state.mobileView = savedMobileView;
@@ -141,7 +142,7 @@ export function initJoblio() {
       if (!layoutEl) return;
       if (!isMobileLayout()) {
         layoutEl.classList.remove("mobile-list", "mobile-detail");
-        document.body.classList.remove("mobile-list-view", "mobile-detail-view");
+        document.body.classList.remove("mobile-list-view", "mobile-detail-view", "mobile-detail-nav-hidden");
         if (mobileBackBtn) mobileBackBtn.classList.remove("show");
         if (mobileToolsBtn) mobileToolsBtn.classList.remove("show");
         if (mobileNewFab) mobileNewFab.classList.remove("show");
@@ -156,6 +157,9 @@ export function initJoblio() {
       layoutEl.classList.toggle("mobile-detail", mode === "detail");
       document.body.classList.toggle("mobile-list-view", mode === "list");
       document.body.classList.toggle("mobile-detail-view", mode === "detail");
+      if (mode !== "detail") {
+        document.body.classList.remove("mobile-detail-nav-hidden");
+      }
       if (mobileBackBtn) {
         mobileBackBtn.classList.toggle("show", mode === "detail");
       }
@@ -166,6 +170,27 @@ export function initJoblio() {
         mobileNewFab.classList.toggle("show", mode === "list");
       }
       localStorage.setItem(MOBILE_VIEW_KEY, mode);
+      handleMobileDetailNavScroll();
+    }
+
+    function handleMobileDetailNavScroll() {
+      if (!(isMobileLayout() && state.mobileView === "detail")) {
+        document.body.classList.remove("mobile-detail-nav-hidden");
+        lastMobileScrollY = window.scrollY || 0;
+        return;
+      }
+      const y = Math.max(0, window.scrollY || 0);
+      const delta = y - lastMobileScrollY;
+      lastMobileScrollY = y;
+      if (y < 18) {
+        document.body.classList.remove("mobile-detail-nav-hidden");
+        return;
+      }
+      if (delta > 2) {
+        document.body.classList.add("mobile-detail-nav-hidden");
+      } else if (delta < -2) {
+        document.body.classList.remove("mobile-detail-nav-hidden");
+      }
     }
 
     function openMobileToolsMenu() {
@@ -1767,7 +1792,9 @@ export function initJoblio() {
       setupColumnResizer();
       window.addEventListener("resize", () => {
         syncMobileLayoutMode();
+        handleMobileDetailNavScroll();
       });
+      window.addEventListener("scroll", handleMobileDetailNavScroll, { passive: true });
       render();
       pingBackendHealth();
       if (!IS_DIRECT_FILE_MODE) {
@@ -1780,6 +1807,7 @@ export function initJoblio() {
         state.mobileView = "list";
         state.scrollListToActive = true;
         syncMobileLayoutMode();
+        handleMobileDetailNavScroll();
         renderList();
       });
     }
