@@ -18,6 +18,7 @@
     "setup": "node ./scripts/setup.js",
     "reconfigure": "node ./scripts/setup.js --reconfigure",
     "start": "node ./scripts/start.js",
+    "dev": "node ./scripts/dev.js",
     "tls:gen": "node ./scripts/gen-local-tls.js",
     "test:security": "node --test ./scripts/security-tests.js ./scripts/restore-tests.js",
     "validate:release": "npm run verify && npm run deps:audit && npm run backup",
