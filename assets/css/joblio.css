@@ -1130,6 +1130,18 @@
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 0.3rem;
       }
+      .mobile-filter-field {
+        display: grid;
+        gap: 0.2rem;
+      }
+      .mobile-filter-label {
+        font-size: 0.62rem;
+        line-height: 1;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        padding-left: 0.28rem;
+      }
       .mobile-filter-chips select {
         width: 100%;
         min-width: 0;
@@ -1137,6 +1149,12 @@
         padding: 0.3rem 0.36rem;
         border-radius: 999px;
         background: var(--bg-panel);
+        border-color: var(--border);
+      }
+      .mobile-filter-chips select.is-active {
+        border-color: var(--primary);
+        background: var(--primary-soft);
+        color: var(--text);
       }
       .status-dialog-grid { grid-template-columns: 1fr; }
       .top-actions #backendHealth,

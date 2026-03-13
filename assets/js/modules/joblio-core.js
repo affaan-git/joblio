@@ -177,12 +177,28 @@ export function initJoblio() {
 
     function syncMobileInlineFilters() {
       if (!mobileSortInline || !mobileStatusInline || !mobileModeInline) return;
-      mobileSortInline.innerHTML = sortSelect.innerHTML;
-      mobileStatusInline.innerHTML = statusFilter.innerHTML;
-      mobileModeInline.innerHTML = modeFilter.innerHTML;
+      const conciseSort = {
+        recent_update: "Recent",
+        oldest_create: "Oldest",
+        company_asc: "Company A-Z",
+        company_desc: "Company Z-A",
+        title_asc: "Title A-Z",
+      };
+      mobileSortInline.innerHTML = Array.from(sortSelect.options)
+        .map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(conciseSort[opt.value] || String(opt.textContent || "").replace(/^Sort:\s*/i, "").trim())}</option>`)
+        .join("");
+      mobileStatusInline.innerHTML = Array.from(statusFilter.options)
+        .map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(String(opt.textContent || "").replace(/^Status:\s*/i, "").trim())}</option>`)
+        .join("");
+      mobileModeInline.innerHTML = Array.from(modeFilter.options)
+        .map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(String(opt.textContent || "").replace(/^Mode:\s*/i, "").trim())}</option>`)
+        .join("");
       mobileSortInline.value = state.sortBy;
       mobileStatusInline.value = state.statusFilter;
       mobileModeInline.value = state.modeFilter;
+      mobileSortInline.classList.toggle("is-active", state.sortBy !== "recent_update");
+      mobileStatusInline.classList.toggle("is-active", state.statusFilter !== "all");
+      mobileModeInline.classList.toggle("is-active", state.modeFilter !== "all");
     }
 
     function isOverdueDate(dateStr) {
