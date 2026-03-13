@@ -22,6 +22,8 @@
     html {
       height: 100%;
       color-scheme: dark;
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
     }
 
     body.theme-light {
