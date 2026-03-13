@@ -115,6 +115,7 @@ export function initJoblio() {
     let serverTimeZone = "UTC";
     let serverNowIso = "";
     let resumeTemplatesAvailable = false;
+    const themeColorMeta = document.getElementById("themeColorMeta");
     const MOBILE_LAYOUT_QUERY = "(max-width: 760px), (orientation: landscape) and (max-height: 520px)";
     const MOBILE_VIEW_KEY = "joblio-mobile-view";
     let lastMobileScrollY = 0;
@@ -315,6 +316,9 @@ export function initJoblio() {
       themeToggle.setAttribute("aria-label", toDark ? "Switch to dark mode" : "Switch to light mode");
       if (mobileThemeBtn) {
         mobileThemeBtn.textContent = toDark ? "Dark mode" : "Light mode";
+      }
+      if (themeColorMeta) {
+        themeColorMeta.setAttribute("content", state.theme === "light" ? "#f3f6fb" : "#0b1018");
       }
     }
 

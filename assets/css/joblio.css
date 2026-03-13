@@ -1225,6 +1225,19 @@
         z-index: 36;
       }
       .layout.mobile-list .right { display: none; }
+      body.mobile-list-view {
+        background: var(--bg-panel);
+      }
+      body.mobile-detail-view {
+        background: var(--bg-panel);
+      }
+      .layout.mobile-list {
+        background: var(--bg-panel);
+      }
+      .layout.mobile-list .left {
+        background: var(--bg-panel);
+        min-height: 100%;
+      }
       .layout.mobile-detail .left { display: none; }
       .mobile-detail-actions {
         position: sticky;
@@ -1233,7 +1246,7 @@
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 0.4rem;
         padding: 0.5rem 0;
-        background: linear-gradient(180deg, transparent, var(--bg) 30%);
+        background: linear-gradient(180deg, transparent, var(--bg-panel) 30%);
       }
       .mobile-detail-actions .btn {
         width: 100%;
