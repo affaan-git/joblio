@@ -624,6 +624,7 @@
 
     .field { display: grid; gap: 0.28rem; }
     .label { font-size: 0.74rem; color: var(--text-muted); }
+    .links-stack { display: grid; gap: 0.56rem; }
 
     input[type="text"],
     input[type="url"],

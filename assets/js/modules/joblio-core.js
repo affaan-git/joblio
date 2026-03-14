@@ -1050,23 +1050,15 @@ export function initJoblio() {
           </section>
 
           <section class="section area-links">
-            <div class="section-title">Links & dates</div>
-            <div class="grid-2">
+            <div class="section-title">Links</div>
+            <div class="links-stack">
               <div class="field">
-                <label class="label">Job URL</label>
+                <label class="label">Listing URL</label>
                 <input id="fJobUrl" type="url" value="${escapeHtml(app.jobUrl || "")}" />
               </div>
               <div class="field">
                 <label class="label">Application URL</label>
                 <input id="fAppUrl" type="url" value="${escapeHtml(app.applicationUrl || "")}" />
-              </div>
-              <div class="field">
-                <label class="label">Applied date</label>
-                <input id="fAppliedAt" type="date" value="${escapeHtml(app.appliedAt || "")}" />
-              </div>
-              <div class="field">
-                <label class="label">Applied time</label>
-                <input id="fAppliedTime" type="time" value="${escapeHtml(app.appliedTime || "")}" />
               </div>
             </div>
           </section>
@@ -1089,43 +1081,6 @@ export function initJoblio() {
       bindText("fAppUrl", "applicationUrl");
 
       document.getElementById("fMode").addEventListener("change", (e) => updateField(app, "workMode", e.target.value));
-      const appliedInput = document.getElementById("fAppliedAt");
-      const appliedTimeInput = document.getElementById("fAppliedTime");
-      appliedInput.addEventListener("change", (e) => {
-        const value = e.target.value;
-        if (!value) {
-          updateField(app, "appliedAt", "");
-          return;
-        }
-        app.appliedAt = value;
-        if (app.status !== "applied") {
-          setStatus(app, "applied", { preserveAppliedDate: true });
-          return;
-        }
-        app.updatedAt = nowIso();
-        persist();
-        renderList();
-        scheduleSavedToast();
-      });
-      appliedTimeInput.addEventListener("change", (e) => {
-        const value = e.target.value;
-        if (!value) {
-          updateField(app, "appliedTime", "");
-          return;
-        }
-        app.appliedTime = value;
-        if (!app.appliedAt) {
-          app.appliedAt = ymdFromIsoInTimeZone(nowIso(), serverTimeZone) || "";
-        }
-        if (app.status !== "applied") {
-          setStatus(app, "applied", { preserveAppliedDate: true });
-          return;
-        }
-        app.updatedAt = nowIso();
-        persist();
-        renderList();
-        scheduleSavedToast();
-      });
 
       document.getElementById("openStatusBtn").addEventListener("click", () => openStatusDialog(app.id, "update"));
       document.getElementById("coreStatusPill").addEventListener("click", () => openStatusDialog(app.id, "history"));
