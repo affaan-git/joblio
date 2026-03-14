@@ -58,6 +58,7 @@ export function initJoblio() {
       themeToggle,
       dataBtn,
       dataMenu,
+      themeMenuBtn,
       backendHealth,
       backendHealthText,
       backendBanner,
@@ -311,9 +312,14 @@ export function initJoblio() {
 
     function syncThemeLabel() {
       const toDark = state.theme === "light";
-      themeToggle.textContent = toDark ? "☾" : "☀";
-      themeToggle.title = toDark ? "Switch to dark mode" : "Switch to light mode";
-      themeToggle.setAttribute("aria-label", toDark ? "Switch to dark mode" : "Switch to light mode");
+      if (themeToggle) {
+        themeToggle.textContent = toDark ? "☾" : "☀";
+        themeToggle.title = toDark ? "Switch to dark mode" : "Switch to light mode";
+        themeToggle.setAttribute("aria-label", toDark ? "Switch to dark mode" : "Switch to light mode");
+      }
+      if (themeMenuBtn) {
+        themeMenuBtn.textContent = toDark ? "Dark mode" : "Light mode";
+      }
       if (mobileThemeBtn) {
         mobileThemeBtn.textContent = toDark ? "Dark mode" : "Light mode";
       }
@@ -1449,19 +1455,23 @@ export function initJoblio() {
       });
     }
 
-    themeToggle.addEventListener("click", () => {
+    const toggleTheme = () => {
       state.theme = state.theme === "light" ? "dark" : "light";
       document.body.classList.toggle("theme-light", state.theme === "light");
       syncThemeLabel();
       persist();
-    });
-    if (mobileThemeBtn) {
-      mobileThemeBtn.addEventListener("click", () => {
-        state.theme = state.theme === "light" ? "dark" : "light";
-        document.body.classList.toggle("theme-light", state.theme === "light");
-        syncThemeLabel();
-        persist();
+    };
+    if (themeToggle) {
+      themeToggle.addEventListener("click", toggleTheme);
+    }
+    if (themeMenuBtn) {
+      themeMenuBtn.addEventListener("click", () => {
+        dataMenu.classList.remove("open");
+        toggleTheme();
       });
+    }
+    if (mobileThemeBtn) {
+      mobileThemeBtn.addEventListener("click", toggleTheme);
     }
 
     dataBtn.addEventListener("click", async (e) => {

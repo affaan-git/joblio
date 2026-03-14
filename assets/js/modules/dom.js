@@ -27,6 +27,7 @@ export function getDomRefs() {
   const themeToggle = document.getElementById('themeToggle');
   const dataBtn = document.getElementById('dataBtn');
   const dataMenu = document.getElementById('dataMenu');
+  const themeMenuBtn = document.getElementById('themeMenuBtn');
   const backendHealth = document.getElementById('backendHealth');
   const backendHealthText = document.getElementById('backendHealthText');
   const backendBanner = document.getElementById('backendBanner');
@@ -104,6 +105,7 @@ export function getDomRefs() {
     themeToggle,
     dataBtn,
     dataMenu,
+    themeMenuBtn,
     backendHealth,
     backendHealthText,
     backendBanner,
