@@ -562,13 +562,14 @@
     button.pill { cursor: pointer; }
 
     .detail {
-      min-height: 100%;
+      min-height: 0;
       box-sizing: border-box;
       max-width: 1080px;
       width: 100%;
       padding: 0.78rem 0.95rem calc(0.9rem - 1px);
       display: grid;
       gap: 0.62rem;
+      align-content: start;
     }
 
     .detail-grid {
@@ -577,9 +578,10 @@
       grid-template-areas:
         "core links"
         "workspace description"
-        "workspace description"
         "note description";
       gap: 0.72rem;
+      align-items: start;
+      align-content: start;
     }
 
     .area-core { grid-area: core; }
@@ -589,16 +591,27 @@
     .area-links { grid-area: links; }
 
     .area-description {
-      grid-template-rows: auto auto 1fr;
+      display: grid;
+      grid-template-rows: auto auto auto;
+      align-content: start;
+      min-height: 0;
+      align-self: start;
+    }
+
+    .area-links {
+      align-self: start;
     }
 
     .area-description .field {
-      height: 100%;
-      grid-template-rows: auto 1fr;
+      display: grid;
+      grid-template-rows: auto auto;
+      gap: 0.28rem;
+      min-height: 0;
     }
 
     .area-description textarea {
-      height: 100%;
+      height: auto;
+      min-height: 220px;
     }
 
     .detail-empty {
@@ -1084,6 +1097,26 @@
           "workspace"
           "description"
           "note";
+      }
+    }
+
+    @media (min-width: 1281px) {
+      .area-links,
+      .area-description {
+        align-self: stretch;
+      }
+
+      .area-description {
+        grid-template-rows: auto auto minmax(0, 1fr);
+      }
+
+      .area-description .field {
+        grid-template-rows: auto minmax(0, 1fr);
+      }
+
+      .area-description textarea {
+        height: 100%;
+        min-height: clamp(220px, 34vh, 420px);
       }
     }
 
