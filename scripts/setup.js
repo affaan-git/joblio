@@ -10,7 +10,8 @@ const prompts = require('prompts');
 const { createPasswordHash } = require('../lib/auth');
 const { parseEnvText } = require('../lib/env-file');
 const { isLoopbackHost, isPrivateOrLoopbackHost, isWildcardHost } = require('../lib/network-policy');
-const { parseAllowlist, isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('../lib/ip-allowlist');
+const { isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('../lib/ip-allowlist');
+const { loadAllowlistFromEnvSync } = require('../lib/allowlist-source');
 const { validateTemplateConfig } = require('../lib/template-registry');
 
 const root = path.resolve(__dirname, '..');
@@ -237,13 +238,23 @@ async function askInteractive(existing, options = {}) {
     trustProxy = (await promptConfirm('Trust proxy headers for client IP?', defaultTrustProxy)) ? '1' : '0';
   }
 
-  const defaultAllowlist = sanitizeValue(existing.JOBLIO_IP_ALLOWLIST || '');
-  const allowlistMessage = allowLan === '1'
-    ? 'IP allowlist CSV (required in LAN mode, e.g. 192.168.1.0/24)'
-    : 'IP allowlist CSV (blank to disable)';
-  const allowlistRaw = await promptText(allowlistMessage, defaultAllowlist);
-  const ipAllowlist = sanitizeValue(allowlistRaw || defaultAllowlist);
-  const parsedAllowlist = parseAllowlist(ipAllowlist);
+  let ipAllowlistPath = '';
+  let parsedAllowlist = [];
+  if (allowLan === '1' || trustProxy === '1') {
+    const defaultAllowlistPath = sanitizeValue(existing.JOBLIO_IP_ALLOWLIST_PATH || '');
+    const allowlistPathRaw = await promptText(
+      'IP allowlist file path (one IP/CIDR per line; use 192.168.1.25 or 192.168.1.25/32 for one device, 192.168.1.0/24 allows full subnet)',
+      defaultAllowlistPath,
+    );
+    ipAllowlistPath = sanitizeValue(allowlistPathRaw);
+    const loaded = loadAllowlistFromEnvSync({
+      JOBLIO_IP_ALLOWLIST_PATH: ipAllowlistPath,
+    }, { baseDir: root });
+    if (loaded.issues.length) {
+      throw new Error(loaded.issues.join('; '));
+    }
+    parsedAllowlist = loaded.entries;
+  }
   if (allowLan === '1' && !parsedAllowlist.length) {
     throw new Error('LAN mode requires a non-empty IP allowlist.');
   }
@@ -258,8 +269,8 @@ async function askInteractive(existing, options = {}) {
   }
 
   const defaultResumeTemplates = sanitizeValue(existing.JOBLIO_RESUME_TEMPLATES || '');
-  const resumeTemplatesRaw = await promptText('Resume template file paths CSV under templates/resume (blank disables)', defaultResumeTemplates);
-  const resumeTemplates = sanitizeValue(resumeTemplatesRaw || defaultResumeTemplates);
+  const resumeTemplatesRaw = await promptText('Resume template relative paths CSV under templates/resume (blank disables)', defaultResumeTemplates);
+  const resumeTemplates = sanitizeValue(resumeTemplatesRaw);
   const templateCheck = validateTemplateConfig(resumeTemplates, resumeTemplateRoot, { requireExisting: true, maxBytes: 10 * 1024 * 1024 });
   if (templateCheck.issues.length) {
     throw new Error(templateCheck.issues.join('; '));
@@ -285,7 +296,7 @@ async function askInteractive(existing, options = {}) {
     authBackoffStartAfter,
     authGuardMaxEntries,
     trustProxy,
-    ipAllowlist,
+    ipAllowlistPath,
     resumeTemplates,
     apiToken: sanitizeValue(existing.JOBLIO_API_TOKEN || randHex(32)),
     auditKey: sanitizeValue(existing.JOBLIO_AUDIT_KEY || randHex(32)),
@@ -318,7 +329,7 @@ async function writeConfig(result) {
     `AUTH_BACKOFF_START_AFTER=${sanitizeValue(result.authBackoffStartAfter)}`,
     `AUTH_GUARD_MAX_ENTRIES=${sanitizeValue(result.authGuardMaxEntries)}`,
     `JOBLIO_TRUST_PROXY=${sanitizeValue(result.trustProxy)}`,
-    `JOBLIO_IP_ALLOWLIST=${sanitizeValue(result.ipAllowlist)}`,
+    `JOBLIO_IP_ALLOWLIST_PATH=${sanitizeValue(result.ipAllowlistPath)}`,
     `JOBLIO_RESUME_TEMPLATES=${sanitizeValue(result.resumeTemplates)}`,
     '',
   ];
@@ -352,7 +363,7 @@ function buildConfigEnv(result) {
     AUTH_BACKOFF_START_AFTER: sanitizeValue(result.authBackoffStartAfter),
     AUTH_GUARD_MAX_ENTRIES: sanitizeValue(result.authGuardMaxEntries),
     JOBLIO_TRUST_PROXY: sanitizeValue(result.trustProxy),
-    JOBLIO_IP_ALLOWLIST: sanitizeValue(result.ipAllowlist),
+    JOBLIO_IP_ALLOWLIST_PATH: sanitizeValue(result.ipAllowlistPath),
     JOBLIO_RESUME_TEMPLATES: sanitizeValue(result.resumeTemplates),
   };
 }

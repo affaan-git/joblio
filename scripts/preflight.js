@@ -3,7 +3,8 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { parseAllowlist, isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('../lib/ip-allowlist');
+const { isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('../lib/ip-allowlist');
+const { loadAllowlistFromEnvSync } = require('../lib/allowlist-source');
 const { isLoopbackHost, isWildcardHost, isPrivateOrLoopbackHost } = require('../lib/network-policy');
 const { validateTemplateConfig } = require('../lib/template-registry');
 
@@ -25,7 +26,6 @@ function evaluatePreflight(env = process.env) {
   const authBackoffMaxMs = Number(env.AUTH_BACKOFF_MAX_MS || 2000);
   const authBackoffStartAfter = Number(env.AUTH_BACKOFF_START_AFTER || 2);
   const authGuardMaxEntries = Number(env.AUTH_GUARD_MAX_ENTRIES || 20000);
-  const ipAllowlistRaw = env.JOBLIO_IP_ALLOWLIST || '';
   const trustProxy = env.JOBLIO_TRUST_PROXY === '1';
   const dataDir = path.resolve(env.JOBLIO_DATA_DIR || path.join(root, '.joblio-data'));
   const templateRoot = path.join(root, 'templates', 'resume');
@@ -59,21 +59,21 @@ function evaluatePreflight(env = process.env) {
   }
   if (authGuardMaxEntries <= 0) issues.push('AUTH_GUARD_MAX_ENTRIES must be greater than 0.');
 
-  const parsedAllowlist = parseAllowlist(ipAllowlistRaw);
-  if (ipAllowlistRaw.trim() && !parsedAllowlist.length) {
-    issues.push('JOBLIO_IP_ALLOWLIST is set but contains no valid entries.');
-  }
+  const loadedAllowlist = loadAllowlistFromEnvSync(env, { baseDir: root });
+  loadedAllowlist.issues.forEach((issue) => issues.push(issue));
+  loadedAllowlist.warns.forEach((w) => warns.push(w));
+  const parsedAllowlist = loadedAllowlist.entries;
   if (!allowLan && parsedAllowlist.length && !trustProxy) {
-    warns.push('JOBLIO_IP_ALLOWLIST is enabled while JOBLIO_TRUST_PROXY=0. Only socket remoteAddress will be used for IP checks.');
+    warns.push('IP allowlist is enabled while JOBLIO_TRUST_PROXY=0. Only socket remoteAddress will be used for IP checks.');
   }
   if (trustProxy && !parsedAllowlist.length) {
-    issues.push('JOBLIO_TRUST_PROXY=1 requires a non-empty JOBLIO_IP_ALLOWLIST.');
+    issues.push('JOBLIO_TRUST_PROXY=1 requires a non-empty allowlist.');
   }
   if (allowLan && !parsedAllowlist.length) {
-    issues.push('JOBLIO_ALLOW_LAN=1 requires a non-empty JOBLIO_IP_ALLOWLIST.');
+    issues.push('JOBLIO_ALLOW_LAN=1 requires a non-empty allowlist.');
   }
   if (allowLan && parsedAllowlist.length && !hasNonLoopbackAllowlistEntry(parsedAllowlist)) {
-    issues.push('JOBLIO_ALLOW_LAN=1 requires at least one non-loopback JOBLIO_IP_ALLOWLIST entry.');
+    issues.push('JOBLIO_ALLOW_LAN=1 requires at least one non-loopback allowlist entry.');
   }
   if (allowLan && trustProxy) {
     issues.push('JOBLIO_ALLOW_LAN=1 requires JOBLIO_TRUST_PROXY=0 unless you intentionally redesign for a trusted proxy chain.');

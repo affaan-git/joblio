@@ -8,9 +8,10 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { verifyPassword } = require('./lib/auth');
 const { AuthGuard } = require('./lib/auth-guard');
-const { normalizeIp, parseAllowlist, isIpAllowed, isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('./lib/ip-allowlist');
+const { normalizeIp, isIpAllowed, isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('./lib/ip-allowlist');
 const { isLoopbackHost, isWildcardHost, isPrivateOrLoopbackHost } = require('./lib/network-policy');
 const { validateTemplateConfig } = require('./lib/template-registry');
+const { loadAllowlistFromEnvSync } = require('./lib/allowlist-source');
 
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 8787);
@@ -56,7 +57,8 @@ const AUTH_BACKOFF_BASE_MS = Number(process.env.AUTH_BACKOFF_BASE_MS || 250);
 const AUTH_BACKOFF_MAX_MS = Number(process.env.AUTH_BACKOFF_MAX_MS || 2000);
 const AUTH_BACKOFF_START_AFTER = Number(process.env.AUTH_BACKOFF_START_AFTER || 2);
 const AUTH_GUARD_MAX_ENTRIES = Number(process.env.AUTH_GUARD_MAX_ENTRIES || 20000);
-const IP_ALLOWLIST = parseAllowlist(process.env.JOBLIO_IP_ALLOWLIST || '');
+const ALLOWLIST_SOURCE = loadAllowlistFromEnvSync(process.env, { baseDir: ROOT_DIR });
+const IP_ALLOWLIST = ALLOWLIST_SOURCE.entries;
 const TRUST_PROXY = process.env.JOBLIO_TRUST_PROXY === '1';
 const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 8 * 60 * 60 * 1000);
 const SESSION_ABS_TTL_MS = Number(process.env.SESSION_ABS_TTL_MS || 24 * 60 * 60 * 1000);
@@ -166,6 +168,9 @@ async function rotateLogIfNeeded() {
 }
 
 function validateStartupConfig() {
+  if (ALLOWLIST_SOURCE.issues.length) {
+    throw new Error(`Invalid allowlist source: ${ALLOWLIST_SOURCE.issues.join('; ')}`);
+  }
   if (!JOBLIO_ALLOW_LAN && !isLoopbackHost(HOST)) {
     throw new Error('Refusing non-local bind host while JOBLIO_ALLOW_LAN=0. Set HOST=127.0.0.1 or enable JOBLIO_ALLOW_LAN=1.');
   }
@@ -177,14 +182,14 @@ function validateStartupConfig() {
       throw new Error(`Refusing non-private host in LAN mode: ${HOST}`);
     }
     if (!IP_ALLOWLIST.length) {
-      throw new Error('JOBLIO_ALLOW_LAN=1 requires a non-empty JOBLIO_IP_ALLOWLIST.');
+      throw new Error('JOBLIO_ALLOW_LAN=1 requires a non-empty allowlist (set JOBLIO_IP_ALLOWLIST_PATH).');
     }
     if (!hasNonLoopbackAllowlistEntry(IP_ALLOWLIST)) {
-      throw new Error('JOBLIO_ALLOW_LAN=1 requires at least one non-loopback JOBLIO_IP_ALLOWLIST entry.');
+      throw new Error('JOBLIO_ALLOW_LAN=1 requires at least one non-loopback allowlist entry.');
     }
     const unsafe = IP_ALLOWLIST.find((entry) => !isSafeAllowlistEntry(entry));
     if (unsafe) {
-      throw new Error(`Unsafe JOBLIO_IP_ALLOWLIST entry in LAN mode: ${unsafe}`);
+      throw new Error(`Unsafe allowlist entry in LAN mode: ${unsafe}`);
     }
     if (TRUST_PROXY) {
       throw new Error('JOBLIO_ALLOW_LAN=1 requires JOBLIO_TRUST_PROXY=0 unless explicitly redesigned for a trusted proxy.');
@@ -215,7 +220,7 @@ function validateStartupConfig() {
     throw new Error('AUTH_GUARD_MAX_ENTRIES must be > 0');
   }
   if (TRUST_PROXY && !IP_ALLOWLIST.length) {
-    throw new Error('JOBLIO_TRUST_PROXY=1 requires a non-empty JOBLIO_IP_ALLOWLIST.');
+    throw new Error('JOBLIO_TRUST_PROXY=1 requires a non-empty allowlist.');
   }
   if (!TLS_CERT_PATH || !TLS_KEY_PATH) {
     throw new Error('TLS enabled but JOBLIO_TLS_CERT_PATH or JOBLIO_TLS_KEY_PATH is missing.');

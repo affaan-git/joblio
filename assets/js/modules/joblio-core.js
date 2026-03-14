@@ -1228,9 +1228,23 @@ export function initJoblio() {
       }
 
       renderWorkspaceFiles();
+      drop.setAttribute("role", "button");
+      drop.setAttribute("tabindex", "0");
+      drop.setAttribute("aria-label", "Upload workspace files");
+      const openWorkspacePicker = () => fileInput.click();
       drop.addEventListener("click", (e) => {
         if (e.target.closest(".workspace-files")) return;
-        fileInput.click();
+        openWorkspacePicker();
+      });
+      drop.addEventListener("touchend", (e) => {
+        if (e.target.closest(".workspace-files")) return;
+        e.preventDefault();
+        openWorkspacePicker();
+      }, { passive: false });
+      drop.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        openWorkspacePicker();
       });
       fileInput.addEventListener("change", async (e) => {
         if (e.target.files) await addWorkspaceFiles(e.target.files);

@@ -80,12 +80,14 @@ Deployment modes (choose one):
   - Use this mode for single-machine use.
   - Use this mode for reverse proxy deployments.
   - If using a trusted reverse proxy and needing real client IP handling:
-    configure `JOBLIO_IP_ALLOWLIST` first, verify it, and only then enable `JOBLIO_TRUST_PROXY=1`.
+    configure `JOBLIO_IP_ALLOWLIST_PATH` first, verify it, and only then enable `JOBLIO_TRUST_PROXY=1`.
 
 - LAN mode (direct device access, advanced):
   - Set `JOBLIO_ALLOW_LAN=1`.
   - Use a specific private interface bind host (no `0.0.0.0` / `::`).
-  - Set a non-empty `JOBLIO_IP_ALLOWLIST` with at least one non-loopback entry.
+  - Set a non-empty `JOBLIO_IP_ALLOWLIST_PATH` pointing to a file with allowed client IP/CIDR entries (one per line or CSV) and at least one non-loopback entry.
+  - For one device, use exact IP or `/32` (example: `192.168.1.25` or `192.168.1.25/32`).
+  - `/24` allows the full subnet (example: `192.168.1.0/24` allows most `192.168.1.x` devices).
   - Keep `JOBLIO_TRUST_PROXY=0`.
 
 - Run `npm run verify` after configuration changes.
@@ -228,12 +230,12 @@ Important for Docker setup prompts:
   - Keep `JOBLIO_ALLOW_LAN=0`.
   - Keep loopback port publishing (`127.0.0.1:8787:8787`).
   - If using a trusted reverse proxy and needing real client IP handling:
-    configure `JOBLIO_IP_ALLOWLIST` first, verify it, and only then enable `JOBLIO_TRUST_PROXY=1`.
+    configure `JOBLIO_IP_ALLOWLIST_PATH` first, verify it, and only then enable `JOBLIO_TRUST_PROXY=1`.
 - Docker LAN mode (advanced, direct private-LAN access):
   - Set `JOBLIO_ALLOW_LAN=1`.
   - Set `HOST` to a specific private interface IP.
   - Keep `JOBLIO_TRUST_PROXY=0`.
-  - Set `JOBLIO_IP_ALLOWLIST` to allowed local clients/subnets.
+  - Set `JOBLIO_IP_ALLOWLIST_PATH` to a file containing allowed local clients/subnets.
 
 Start service:
 
@@ -439,7 +441,7 @@ These keys are written by setup and used at runtime.
 | `AUTH_BACKOFF_START_AFTER` | `2` | Failure count when backoff starts |
 | `AUTH_GUARD_MAX_ENTRIES` | `20000` | In-memory auth guard entry cap |
 | `JOBLIO_TRUST_PROXY` | `0` | Trust `X-Forwarded-For` for client IP |
-| `JOBLIO_IP_ALLOWLIST` | empty | CSV allowlist of source IPs/CIDRs |
+| `JOBLIO_IP_ALLOWLIST_PATH` | empty | Path to allowlist file containing source IP/CIDR entries |
 | `JOBLIO_RESUME_TEMPLATES` | empty | CSV list of template file paths under `templates/resume` |
 
 Runtime override policy:
@@ -475,7 +477,7 @@ These are server-supported keys (advanced operations) that are not currently pro
 | `AUTH_GUARD_MAX_ENTRIES` | `20000` | Auth guard entry cap |
 | `JOBLIO_ALLOW_LAN` | `0` | Enable LAN mode (requires explicit IP allowlist) |
 | `JOBLIO_TRUST_PROXY` | `0` | Trust `X-Forwarded-For` |
-| `JOBLIO_IP_ALLOWLIST` | empty | Allowed IPs/CIDRs (CSV) |
+| `JOBLIO_IP_ALLOWLIST_PATH` | empty | Path to allowlist file with allowed IP/CIDR entries |
 | `JOBLIO_RESUME_TEMPLATES` | empty | CSV template paths under `templates/resume` |
 | `SESSION_TTL_MS` | `28800000` | Session idle timeout |
 | `SESSION_ABS_TTL_MS` | `86400000` | Session absolute timeout |

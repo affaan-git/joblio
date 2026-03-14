@@ -9,6 +9,7 @@ const path = require('node:path');
 const { createPasswordHash, verifyPassword } = require('../lib/auth');
 const { AuthGuard } = require('../lib/auth-guard');
 const { parseAllowlist, isIpAllowed, normalizeIp, isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('../lib/ip-allowlist');
+const { loadAllowlistFromEnvSync } = require('../lib/allowlist-source');
 const { isLoopbackHost, isWildcardHost, isPrivateOrLoopbackHost } = require('../lib/network-policy');
 const { validateTemplateConfig } = require('../lib/template-registry');
 
@@ -98,6 +99,30 @@ test('lan mode requires non-loopback allowlist entries', () => {
   assert.equal(hasNonLoopbackAllowlistEntry(parseAllowlist('localhost,127.0.0.1')), false);
   assert.equal(hasNonLoopbackAllowlistEntry(parseAllowlist('192.168.1.0/24')), true);
   assert.equal(hasNonLoopbackAllowlistEntry(parseAllowlist('10.1.2.3')), true);
+});
+
+test('allowlist loader reads newline-delimited entries from configured path', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'joblio-allowlist-test-'));
+  const allowlistPath = path.join(tempRoot, 'allowlist.csv');
+  await fs.writeFile(allowlistPath, '192.168.1.42\n10.0.0.0/24\n', 'utf8');
+
+  const loaded = loadAllowlistFromEnvSync({ JOBLIO_IP_ALLOWLIST_PATH: allowlistPath }, { baseDir: tempRoot });
+  assert.equal(loaded.issues.length, 0);
+  assert.equal(isIpAllowed('192.168.1.42', loaded.entries), true);
+  assert.equal(isIpAllowed('10.0.0.17', loaded.entries), true);
+  assert.equal(isIpAllowed('172.16.0.5', loaded.entries), false);
+});
+
+test('allowlist loader rejects unreadable path', () => {
+  const loaded = loadAllowlistFromEnvSync({ JOBLIO_IP_ALLOWLIST_PATH: '/definitely/missing/file.csv' }, { baseDir: '/' });
+  assert.ok(loaded.issues.some((i) => i.includes('not found/readable')));
+  assert.equal(loaded.entries.length, 0);
+});
+
+test('allowlist loader rejects legacy inline allowlist env', () => {
+  const loaded = loadAllowlistFromEnvSync({ JOBLIO_IP_ALLOWLIST: '192.168.1.10' }, { baseDir: '/' });
+  assert.ok(loaded.issues.some((i) => i.includes('not supported')));
+  assert.equal(loaded.entries.length, 0);
 });
 
 test('network policy enforces private LAN host rules', () => {

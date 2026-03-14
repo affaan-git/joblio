@@ -4,7 +4,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { parseEnvText } = require('../lib/env-file');
-const { parseAllowlist, isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('../lib/ip-allowlist');
+const { isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('../lib/ip-allowlist');
+const { loadAllowlistFromEnvSync } = require('../lib/allowlist-source');
 const { isLoopbackHost, isWildcardHost, isPrivateOrLoopbackHost } = require('../lib/network-policy');
 const { validateTemplateConfig } = require('../lib/template-registry');
 
@@ -69,15 +70,18 @@ function evaluateSecurityCheck(envOverride = null) {
     if (!fs.existsSync(keyPath)) issues.push(`TLS key not found: ${keyPathRaw}`);
   }
 
-  if (String(env.JOBLIO_TRUST_PROXY || '0') === '1' && !String(env.JOBLIO_IP_ALLOWLIST || '').trim()) {
-    issues.push('JOBLIO_TRUST_PROXY=1 requires a non-empty JOBLIO_IP_ALLOWLIST.');
+  const loadedAllowlist = loadAllowlistFromEnvSync(env, { baseDir: root });
+  loadedAllowlist.issues.forEach((issue) => issues.push(issue));
+  loadedAllowlist.warns.forEach((w) => warns.push(w));
+  const parsedAllowlist = loadedAllowlist.entries;
+  if (String(env.JOBLIO_TRUST_PROXY || '0') === '1' && !parsedAllowlist.length) {
+    issues.push('JOBLIO_TRUST_PROXY=1 requires a non-empty allowlist.');
   }
-  const parsedAllowlist = parseAllowlist(String(env.JOBLIO_IP_ALLOWLIST || ''));
   if (allowLan && !parsedAllowlist.length) {
-    issues.push('JOBLIO_ALLOW_LAN=1 requires a non-empty JOBLIO_IP_ALLOWLIST.');
+    issues.push('JOBLIO_ALLOW_LAN=1 requires a non-empty allowlist.');
   }
   if (allowLan && parsedAllowlist.length && !hasNonLoopbackAllowlistEntry(parsedAllowlist)) {
-    issues.push('JOBLIO_ALLOW_LAN=1 requires at least one non-loopback JOBLIO_IP_ALLOWLIST entry.');
+    issues.push('JOBLIO_ALLOW_LAN=1 requires at least one non-loopback allowlist entry.');
   }
   if (allowLan && String(env.JOBLIO_TRUST_PROXY || '0') === '1') {
     issues.push('JOBLIO_ALLOW_LAN=1 requires JOBLIO_TRUST_PROXY=0 unless explicitly redesigned for trusted proxy chains.');
@@ -85,7 +89,7 @@ function evaluateSecurityCheck(envOverride = null) {
   if (allowLan) {
     const unsafe = parsedAllowlist.find((entry) => !isSafeAllowlistEntry(entry));
     if (unsafe) {
-      issues.push(`Unsafe JOBLIO_IP_ALLOWLIST entry in LAN mode: ${unsafe}`);
+      issues.push(`Unsafe allowlist entry in LAN mode: ${unsafe}`);
     }
   }
 
