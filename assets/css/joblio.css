@@ -206,6 +206,12 @@
       min-width: 0;
     }
 
+    .top-actions > .btn,
+    .top-actions > .action-menu-wrap,
+    .top-actions > .health-pill {
+      flex: 0 0 auto;
+    }
+
     .mobile-back-btn {
       display: none;
     }
@@ -283,6 +289,10 @@
       font-size: 0.81rem;
       cursor: pointer;
       transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+    }
+
+    #newBtn {
+      white-space: nowrap;
     }
 
     .btn:hover { background: var(--bg-hover); color: var(--text); }
@@ -1106,6 +1116,22 @@
       }
       .grid-2 { grid-template-columns: 1fr; }
       .center-controls { grid-template-columns: minmax(0, 1fr) 150px 104px; }
+    }
+
+    @media (pointer: coarse) and (min-width: 761px) {
+      .top-bar {
+        padding-top: calc(0.72rem + env(safe-area-inset-top));
+        padding-left: calc(1.1rem + env(safe-area-inset-left));
+        padding-right: calc(1.1rem + env(safe-area-inset-right));
+      }
+      .backend-banner {
+        padding-left: calc(1.1rem + env(safe-area-inset-left));
+        padding-right: calc(1.1rem + env(safe-area-inset-right));
+      }
+      .layout {
+        padding-left: env(safe-area-inset-left);
+        padding-right: env(safe-area-inset-right);
+      }
     }
 
     @media (max-width: 760px), (orientation: landscape) and (max-height: 520px) {

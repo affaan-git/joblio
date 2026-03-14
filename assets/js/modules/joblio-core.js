@@ -324,7 +324,7 @@ export function initJoblio() {
         mobileThemeBtn.textContent = toDark ? "Dark mode" : "Light mode";
       }
       if (themeColorMeta) {
-        themeColorMeta.setAttribute("content", state.theme === "light" ? "#f3f6fb" : "#0b1018");
+        themeColorMeta.setAttribute("content", state.theme === "light" ? "#ffffff" : "#121927");
       }
     }
 
