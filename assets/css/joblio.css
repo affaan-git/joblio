@@ -1088,18 +1088,6 @@
       to { opacity: 1; transform: translateY(0); }
     }
 
-    @media (max-width: 1280px) {
-      .detail-grid {
-        grid-template-columns: 1fr;
-        grid-template-areas:
-          "core"
-          "links"
-          "workspace"
-          "description"
-          "note";
-      }
-    }
-
     @media (min-width: 1281px) {
       .area-links,
       .area-description {
@@ -1120,35 +1108,54 @@
       }
     }
 
-    @media (max-width: 980px) {
-      .top-bar {
-        grid-template-columns: minmax(0, 1fr);
-      }
+    @media (max-width: 1200px) and (min-width: 761px) {
       .brand,
       .center-controls,
       .top-actions {
         min-width: 0;
       }
+      .top-bar {
+        grid-template-columns: auto minmax(0, 1fr);
+        grid-template-areas:
+          "brand actions"
+          "controls controls";
+        row-gap: 0.45rem;
+      }
+      .brand {
+        grid-area: brand;
+      }
+      .top-actions {
+        grid-area: actions;
+        justify-self: end;
+      }
       .center-controls {
-        grid-template-columns: minmax(0, 1fr) 165px 110px;
+        grid-area: controls;
+        grid-template-columns: minmax(0, 1fr) 188px 102px;
+        width: 100%;
+        gap: 0.56rem;
       }
-    }
-
-    @media (max-width: 980px) {
-      body {
-        overflow: auto;
+      .layout {
+        grid-template-columns: minmax(260px, 34vw) 8px minmax(0, 1fr);
       }
-      .layout { grid-template-columns: 1fr; }
-      .col-resizer { display: none; }
-      .left {
-        max-height: none;
-        overflow: visible;
+      .detail-grid {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+          "core"
+          "links"
+          "workspace"
+          "description"
+          "note";
       }
-      .right {
-        overflow: visible;
+      .area-links,
+      .area-description {
+        align-self: start;
       }
-      .grid-2 { grid-template-columns: 1fr; }
-      .center-controls { grid-template-columns: minmax(0, 1fr) 150px 104px; }
+      .area-description {
+        grid-template-rows: auto auto auto;
+      }
+      .area-description .field {
+        grid-template-rows: auto auto;
+      }
     }
 
     @media (pointer: coarse) and (min-width: 761px) {
@@ -1168,8 +1175,31 @@
     }
 
     @media (max-width: 760px), (orientation: landscape) and (max-height: 520px) {
+      body {
+        overflow: auto;
+      }
+      .layout { grid-template-columns: 1fr; }
+      .col-resizer { display: none; }
+      .left {
+        max-height: none;
+        overflow: visible;
+      }
+      .right {
+        overflow: visible;
+      }
+      .grid-2 { grid-template-columns: 1fr; }
+      .detail-grid {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+          "core"
+          "links"
+          "workspace"
+          "description"
+          "note";
+      }
       .top-bar {
         grid-template-columns: 1fr;
+        grid-template-areas: none;
         gap: 0.42rem;
         padding-top: calc(env(safe-area-inset-top) + 0.55rem);
         padding-bottom: 0.55rem;
@@ -1180,6 +1210,11 @@
         z-index: 45;
         background: var(--bg-elevated);
         transition: transform 0.18s ease;
+      }
+      .brand,
+      .center-controls,
+      .top-actions {
+        grid-area: auto;
       }
       .layout {
         padding-left: env(safe-area-inset-left);
@@ -1199,6 +1234,9 @@
         justify-content: flex-end;
         gap: 0.25rem;
         transition: transform 0.18s ease, opacity 0.18s ease;
+      }
+      body.mobile-list-view .top-actions {
+        top: calc(env(safe-area-inset-top) + 0.56rem);
       }
       body.mobile-detail-view .top-actions {
         position: static;
