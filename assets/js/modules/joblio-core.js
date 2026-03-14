@@ -116,6 +116,9 @@ export function initJoblio() {
     let serverTimeZone = "UTC";
     let serverNowIso = "";
     let resumeTemplatesAvailable = false;
+    const MOBILE_VIEW_TRANSITION_MS = 190;
+    let mobileViewTransitionTimer = null;
+    let mobileBackAnimating = false;
     const themeColorMeta = document.getElementById("themeColorMeta");
     const MOBILE_LAYOUT_QUERY = "(max-width: 760px), (orientation: landscape) and (max-height: 520px)";
     const MOBILE_VIEW_KEY = "joblio-mobile-view";
@@ -144,7 +147,15 @@ export function initJoblio() {
       if (!layoutEl) return;
       if (!isMobileLayout()) {
         layoutEl.classList.remove("mobile-list", "mobile-detail");
-        document.body.classList.remove("mobile-list-view", "mobile-detail-view", "mobile-detail-nav-hidden");
+        document.body.classList.remove(
+          "mobile-list-view",
+          "mobile-detail-view",
+          "mobile-detail-nav-hidden",
+          "mobile-transition-to-list",
+          "mobile-transition-to-detail",
+          "mobile-swipe-back-dragging"
+        );
+        document.body.style.removeProperty("--mobile-swipe-offset");
         if (mobileBackBtn) mobileBackBtn.classList.remove("show");
         if (mobileToolsBtn) mobileToolsBtn.classList.remove("show");
         if (mobileNewFab) mobileNewFab.classList.remove("show");
@@ -173,6 +184,45 @@ export function initJoblio() {
       }
       localStorage.setItem(MOBILE_VIEW_KEY, mode);
       handleMobileDetailNavScroll();
+    }
+
+    function setMobileDetailTransitionClass(name) {
+      document.body.classList.remove("mobile-transition-to-list", "mobile-transition-to-detail");
+      if (mobileViewTransitionTimer) {
+        clearTimeout(mobileViewTransitionTimer);
+        mobileViewTransitionTimer = null;
+      }
+      if (!name) return;
+      document.body.classList.add(name);
+      mobileViewTransitionTimer = setTimeout(() => {
+        document.body.classList.remove(name);
+        mobileViewTransitionTimer = null;
+      }, MOBILE_VIEW_TRANSITION_MS + 40);
+    }
+
+    function goToMobileDetailAnimated() {
+      if (!isMobileLayout()) {
+        state.mobileView = "detail";
+        return;
+      }
+      state.mobileView = "detail";
+      setMobileDetailTransitionClass("mobile-transition-to-detail");
+    }
+
+    function goToMobileListAnimated() {
+      if (!isMobileLayout() || state.mobileView !== "detail" || mobileBackAnimating) return;
+      mobileBackAnimating = true;
+      setMobileDetailTransitionClass("mobile-transition-to-list");
+      setTimeout(() => {
+        state.mobileView = "list";
+        state.scrollListToActive = true;
+        syncMobileLayoutMode();
+        handleMobileDetailNavScroll();
+        renderList();
+        document.body.classList.remove("mobile-swipe-back-dragging");
+        document.body.style.removeProperty("--mobile-swipe-offset");
+        mobileBackAnimating = false;
+      }, MOBILE_VIEW_TRANSITION_MS);
     }
 
     function handleMobileDetailNavScroll() {
@@ -861,7 +911,7 @@ export function initJoblio() {
         card.addEventListener("click", () => {
           state.activeId = card.dataset.id;
           if (isMobileLayout()) {
-            state.mobileView = "detail";
+            goToMobileDetailAnimated();
           }
           persist();
           render();
@@ -1306,7 +1356,7 @@ export function initJoblio() {
       state.apps.unshift(app);
       state.activeId = app.id;
       if (isMobileLayout()) {
-        state.mobileView = "detail";
+        goToMobileDetailAnimated();
       }
       state.pendingDescriptionFocusId = sourceText ? null : app.id;
       persist();
@@ -1773,35 +1823,55 @@ export function initJoblio() {
 
     if (mobileBackBtn) {
       mobileBackBtn.addEventListener("click", () => {
-        state.mobileView = "list";
-        state.scrollListToActive = true;
-        syncMobileLayoutMode();
-        handleMobileDetailNavScroll();
-        renderList();
+        goToMobileListAnimated();
       });
     }
 
     let touchStartX = 0;
     let touchStartY = 0;
+    let backSwipeTracking = false;
     document.addEventListener("touchstart", (e) => {
       if (!isMobileLayout()) return;
+      if (state.mobileView !== "detail") return;
       const touch = e.touches?.[0];
       if (!touch) return;
+      if (touch.clientX > 28) return;
       touchStartX = touch.clientX;
       touchStartY = touch.clientY;
+      backSwipeTracking = true;
+      document.body.classList.add("mobile-swipe-back-dragging");
     }, { passive: true });
+    document.addEventListener("touchmove", (e) => {
+      if (!isMobileLayout()) return;
+      if (!backSwipeTracking || state.mobileView !== "detail") return;
+      const touch = e.touches?.[0];
+      if (!touch) return;
+      const dx = Math.max(0, touch.clientX - touchStartX);
+      const dy = Math.abs(touch.clientY - touchStartY);
+      if (dy > 70) return;
+      if (dx > 0) {
+        e.preventDefault();
+        document.body.style.setProperty("--mobile-swipe-offset", `${Math.min(dx, 120)}px`);
+      }
+    }, { passive: false });
     document.addEventListener("touchend", (e) => {
       if (!isMobileLayout()) return;
-      if (state.mobileView !== "detail") return;
+      if (!backSwipeTracking || state.mobileView !== "detail") return;
+      backSwipeTracking = false;
       const touch = e.changedTouches?.[0];
       if (!touch) return;
       const dx = touch.clientX - touchStartX;
       const dy = Math.abs(touch.clientY - touchStartY);
       if (dx > 90 && dy < 60) {
-        state.mobileView = "list";
-        state.scrollListToActive = true;
-        syncMobileLayoutMode();
-        renderList();
+        goToMobileListAnimated();
+      } else {
+        document.body.classList.remove("mobile-swipe-back-dragging");
+        document.body.style.setProperty("--mobile-swipe-offset", "0px");
+        setTimeout(() => {
+          if (state.mobileView === "detail") {
+            document.body.style.removeProperty("--mobile-swipe-offset");
+          }
+        }, MOBILE_VIEW_TRANSITION_MS);
       }
     }, { passive: true });
 

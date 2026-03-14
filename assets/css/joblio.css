@@ -1351,8 +1351,31 @@
       }
       .layout.mobile-detail .right {
         background: transparent;
+        transform: translateX(var(--mobile-swipe-offset, 0px));
+        transition: transform 0.18s ease, opacity 0.18s ease;
+        will-change: transform;
       }
       .layout.mobile-detail .left { display: none; }
+      body.mobile-swipe-back-dragging .layout.mobile-detail .right {
+        transition: none;
+      }
+      body.mobile-transition-to-list .layout.mobile-detail .right {
+        transform: translateX(32px);
+        opacity: 0;
+      }
+      body.mobile-transition-to-detail .layout.mobile-detail .right {
+        animation: mobile-detail-in 0.2s ease;
+      }
+      @keyframes mobile-detail-in {
+        from {
+          transform: translateX(24px);
+          opacity: 0.94;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
       .mobile-detail-actions {
         position: sticky;
         bottom: 0;
