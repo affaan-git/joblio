@@ -96,10 +96,14 @@
       width: 100%;
       min-width: 0;
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(170px, 200px) 120px;
+      grid-template-columns: minmax(0, 1fr) auto 120px;
       align-items: center;
       gap: 0.45rem;
       justify-self: center;
+    }
+
+    #sortSelect {
+      width: var(--sort-select-width, auto);
     }
 
     .search-wrap { width: 100%; position: relative; }

@@ -187,14 +187,21 @@ export function createSearchFilters(deps) {
   }
 
   function renderFilters() {
-    sortSelect.innerHTML = [
-      '<option value="recent_update">Sort: Recently updated</option>',
-      '<option value="oldest_create">Sort: Oldest created</option>',
-      '<option value="company_asc">Sort: Company A-Z</option>',
-      '<option value="company_desc">Sort: Company Z-A</option>',
-      '<option value="title_asc">Sort: Title A-Z</option>',
-    ].join('');
+    const sortOptions = [
+      { value: 'recent_update', label: 'Sort: Recently updated' },
+      { value: 'oldest_create', label: 'Sort: Oldest created' },
+      { value: 'company_asc', label: 'Sort: Company A-Z' },
+      { value: 'company_desc', label: 'Sort: Company Z-A' },
+      { value: 'title_asc', label: 'Sort: Title A-Z' },
+    ];
+    sortSelect.innerHTML = sortOptions
+      .map((opt) => `<option value="${opt.value}">${escapeHtml(opt.label)}</option>`)
+      .join('');
     sortSelect.value = state.sortBy;
+    const longestSortLabel = sortOptions.reduce((max, opt) => Math.max(max, opt.label.length), 0);
+    const stableWidthCh = Math.min(30, Math.max(20, longestSortLabel + 1));
+    sortSelect.style.setProperty('--sort-select-width', `${stableWidthCh}ch`);
+    sortSelect.style.width = `${stableWidthCh}ch`;
 
     statusFilter.innerHTML = [
       '<option value="all">Status: All</option>',
