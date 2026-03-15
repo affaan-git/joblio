@@ -125,6 +125,12 @@ Start setup
 npm run setup
 ```
 
+Then start Joblio:
+
+```sh
+npm start
+```
+
 ## Usage
 
 After completing setup from [Installation](#installation), run Joblio with `npm start`, then open the HTTPS URL printed in your terminal and sign in with your configured Basic Auth credentials.
@@ -155,7 +161,7 @@ Check levels:
 
 ## Recommended Flows
 
-First-time setup and run:
+First-time setup and run (same as Quick Start):
 
 ```sh
 npm install
@@ -188,6 +194,8 @@ npm start
 For day-to-day development:
 
 `npm run build` to regenerate the frontend runtime bundle (`assets/js/joblio.bundle.js`) from modular source files.
+
+`npm run dev` to run the backend in watch mode and auto-rebuild/restart during development.
 
 Generated build artifacts:
 
@@ -393,8 +401,9 @@ Setup prompts for:
 - Auth backoff base/max/start-after
 - Auth guard max entries
 - Trust proxy headers for client IP
-- IP allowlist CSV
-- Resume template paths CSV (relative paths under `templates/resume`)
+- IP allowlist file path (setup can create it if missing)
+- IP allowlist entries (CSV IP/CIDR values written into the allowlist file)
+- Resume template paths (CSV, relative to `templates/resume`; blank disables)
 
 Setup output:
 
