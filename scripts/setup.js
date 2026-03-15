@@ -4,13 +4,14 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
+const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const prompts = require('prompts');
 const { createPasswordHash } = require('../lib/auth');
 const { parseEnvText } = require('../lib/env-file');
 const { isLoopbackHost, isPrivateOrLoopbackHost, isWildcardHost } = require('../lib/network-policy');
-const { isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('../lib/ip-allowlist');
+const { parseAllowlist, isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('../lib/ip-allowlist');
 const { loadAllowlistFromEnvSync } = require('../lib/allowlist-source');
 const { validateTemplateConfig } = require('../lib/template-registry');
 
@@ -112,6 +113,69 @@ async function promptHidden(promptText) {
   return answer.value;
 }
 
+function getSuggestedLanIpv4() {
+  const interfaces = os.networkInterfaces();
+  for (const values of Object.values(interfaces || {})) {
+    for (const info of values || []) {
+      if (!info || info.family !== 'IPv4') continue;
+      const addr = sanitizeValue(info.address || '');
+      if (!addr || isLoopbackHost(addr)) continue;
+      if (isPrivateOrLoopbackHost(addr)) {
+        return addr;
+      }
+    }
+  }
+  return '';
+}
+
+async function ensureAllowlistFile(pathRaw, context = {}) {
+  const trimmed = sanitizeValue(pathRaw).trim();
+  if (!trimmed) {
+    throw new Error('IP allowlist file path is required.');
+  }
+  const resolvedPath = path.resolve(trimmed);
+  try {
+    const stat = await fsp.stat(resolvedPath);
+    if (!stat.isFile()) {
+      throw new Error(`IP allowlist path is not a file: ${trimmed}`);
+    }
+    return;
+  } catch (err) {
+    if (err && err.code !== 'ENOENT') {
+      throw err;
+    }
+  }
+
+  const createFile = await promptConfirm(`IP allowlist file not found. Create it now? (${trimmed})`, true);
+  if (!createFile) {
+    throw new Error('IP allowlist file is required when LAN mode or trusted proxy mode is enabled.');
+  }
+
+  const parent = path.dirname(resolvedPath);
+  await fsp.mkdir(parent, { recursive: true, mode: 0o700 });
+  const lines = [];
+  const lanHost = sanitizeValue(context.lanHost || '');
+  if (lanHost) {
+    lines.push(`${lanHost}/32`);
+  } else {
+    lines.push('127.0.0.1');
+  }
+  const content = `${lines.join('\n')}\n`;
+  await fsp.writeFile(resolvedPath, content, { mode: 0o600 });
+  await fsp.chmod(resolvedPath, 0o600).catch(() => {});
+}
+
+async function writeAllowlistFile(pathRaw, entries) {
+  const trimmed = sanitizeValue(pathRaw).trim();
+  if (!trimmed) throw new Error('IP allowlist file path is required.');
+  const resolvedPath = path.resolve(trimmed);
+  const parent = path.dirname(resolvedPath);
+  await fsp.mkdir(parent, { recursive: true, mode: 0o700 });
+  const content = `${entries.map((v) => sanitizeValue(v).trim()).filter(Boolean).join('\n')}\n`;
+  await fsp.writeFile(resolvedPath, content, { mode: 0o600 });
+  await fsp.chmod(resolvedPath, 0o600).catch(() => {});
+}
+
 async function askInteractive(existing, options = {}) {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     throw new Error('Interactive setup requires a TTY terminal.');
@@ -152,8 +216,15 @@ async function askInteractive(existing, options = {}) {
 
   let host = '127.0.0.1';
   if (allowLan === '1') {
-    const defaultLanHost = sanitizeValue(existing.HOST || '');
-    const lanHostRaw = await promptText('LAN bind host (private interface IP, not 0.0.0.0)', defaultLanHost);
+    const suggestedLanHost = getSuggestedLanIpv4();
+    const existingHost = sanitizeValue(existing.HOST || '');
+    const defaultLanHost = (existingHost && !isLoopbackHost(existingHost))
+      ? existingHost
+      : (suggestedLanHost || '');
+    const lanHostRaw = await promptText(
+      `LAN bind host (private interface IP, example: ${suggestedLanHost || '192.168.1.25'})`,
+      defaultLanHost,
+    );
     host = sanitizeValue(lanHostRaw || defaultLanHost);
     if (!host) throw new Error('LAN bind host is required when LAN mode is enabled.');
     if (isWildcardHost(host)) throw new Error('Wildcard bind host is not allowed in LAN mode.');
@@ -241,22 +312,30 @@ async function askInteractive(existing, options = {}) {
   let ipAllowlistPath = '';
   let parsedAllowlist = [];
   if (allowLan === '1' || trustProxy === '1') {
-    const defaultAllowlistPath = sanitizeValue(existing.JOBLIO_IP_ALLOWLIST_PATH || '');
+    const defaultAllowlistPath = sanitizeValue(existing.JOBLIO_IP_ALLOWLIST_PATH || path.join(runtimeDataDir, 'allowlist', 'ip-allowlist.txt'));
     const allowlistPathRaw = await promptText(
-      'IP allowlist file path (one IP/CIDR per line; use 192.168.1.25 or 192.168.1.25/32 for one device, 192.168.1.0/24 allows full subnet)',
+      'IP allowlist file path (one IP/CIDR per line, example: 192.168.1.25 or 192.168.1.0/24)',
       defaultAllowlistPath,
     );
-    ipAllowlistPath = sanitizeValue(allowlistPathRaw);
+    ipAllowlistPath = sanitizeValue(allowlistPathRaw || defaultAllowlistPath);
+    await ensureAllowlistFile(ipAllowlistPath, { lanHost: allowLan === '1' ? host : '' });
     const loaded = loadAllowlistFromEnvSync({
       JOBLIO_IP_ALLOWLIST_PATH: ipAllowlistPath,
     }, { baseDir: root });
     if (loaded.issues.length) {
       throw new Error(loaded.issues.join('; '));
     }
-    parsedAllowlist = loaded.entries;
+    const allowlistEntriesRaw = await promptText(
+      'IP allowlist entries (comma-separated IP/CIDR; /32 = one device, /24 = subnet)',
+      loaded.entries.join(', '),
+    );
+    parsedAllowlist = parseAllowlist(allowlistEntriesRaw);
   }
   if (allowLan === '1' && !parsedAllowlist.length) {
     throw new Error('LAN mode requires a non-empty IP allowlist.');
+  }
+  if (trustProxy === '1' && !parsedAllowlist.length) {
+    throw new Error('Trusted proxy mode requires a non-empty IP allowlist.');
   }
   if (allowLan === '1' && parsedAllowlist.length && !hasNonLoopbackAllowlistEntry(parsedAllowlist)) {
     throw new Error('LAN mode requires at least one non-loopback IP allowlist entry.');
@@ -267,9 +346,12 @@ async function askInteractive(existing, options = {}) {
       throw new Error(`Unsafe IP allowlist entry for LAN mode: ${unsafeEntry}`);
     }
   }
+  if (allowLan === '1' || trustProxy === '1') {
+    await writeAllowlistFile(ipAllowlistPath, parsedAllowlist);
+  }
 
   const defaultResumeTemplates = sanitizeValue(existing.JOBLIO_RESUME_TEMPLATES || '');
-  const resumeTemplatesRaw = await promptText('Resume template relative paths CSV under templates/resume (blank disables)', defaultResumeTemplates);
+  const resumeTemplatesRaw = await promptText('Resume template paths (CSV, relative to templates/resume). Leave blank to disable.', defaultResumeTemplates);
   const resumeTemplates = sanitizeValue(resumeTemplatesRaw);
   const templateCheck = validateTemplateConfig(resumeTemplates, resumeTemplateRoot, { requireExisting: true, maxBytes: 10 * 1024 * 1024 });
   if (templateCheck.issues.length) {
