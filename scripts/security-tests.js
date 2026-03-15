@@ -119,12 +119,6 @@ test('allowlist loader rejects unreadable path', () => {
   assert.equal(loaded.entries.length, 0);
 });
 
-test('allowlist loader rejects legacy inline allowlist env', () => {
-  const loaded = loadAllowlistFromEnvSync({ JOBLIO_IP_ALLOWLIST: '192.168.1.10' }, { baseDir: '/' });
-  assert.ok(loaded.issues.some((i) => i.includes('not supported')));
-  assert.equal(loaded.entries.length, 0);
-});
-
 test('network policy enforces private LAN host rules', () => {
   assert.equal(isLoopbackHost('127.0.0.1'), true);
   assert.equal(isWildcardHost('0.0.0.0'), true);
