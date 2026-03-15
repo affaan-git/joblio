@@ -6,15 +6,18 @@ on:
       - main
       - dev
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   unit-static:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 20
 
@@ -41,10 +44,10 @@ jobs:
     needs: unit-static
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 20
 
@@ -89,7 +92,7 @@ jobs:
           EOF
 
       - name: Run preflight
-        run: npm run preflight
+        run: node -e "const { readEnvFileSync } = require('./lib/env-file'); Object.assign(process.env, readEnvFileSync('.joblio-data/config.env')); require('./scripts/preflight').main();"
 
       - name: Run security config checks
-        run: npm run security:check
+        run: node -e "const { readEnvFileSync } = require('./lib/env-file'); Object.assign(process.env, readEnvFileSync('.joblio-data/config.env')); require('./scripts/security-check').main();"
