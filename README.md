@@ -5,9 +5,13 @@ A local, single-user job application tracker built to support my job search.
 ![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js)
 ![JavaScript](https://img.shields.io/badge/JavaScript-ES6%2B-F7DF1E?logo=javascript)
 
-> WARNING: Joblio is built for local/private network use.
-> Do not expose it to public interfaces or directly to the internet.
-> Internet/public deployment is outside supported security scope.
+## SECURITY NOTICE
+
+> Joblio is designed for **local** or **private network use** only.
+> Do **not** expose it to public interfaces or the public internet.
+> Internet-facing deployment is outside the project's supported security scope.
+>
+> This software is provided **"as is"**, without warranties or guarantees of any kind. See the [LICENSE](LICENSE) file for details.
 
 ![example-page](docs/images/example-page.png)
 
@@ -599,6 +603,14 @@ Command usage guidance:
   - `npm run build` after frontend module changes
   - `npm run verify` before commit for quick local validation
   - `npm run validate:release` before release for full release-gate validation
+
+## License
+
+This project is licensed under CC BY-NC-SA 4.0.
+
+You may view, modify, and redistribute this project for non-commercial purposes with attribution.
+
+Derivative works must use the same license.
 
 ## Troubleshooting
 
