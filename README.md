@@ -51,6 +51,45 @@ Issues during setup? Jump to [Troubleshooting](#troubleshooting).
 - [`Node.js 20+`](https://nodejs.org/) ([download](https://nodejs.org/en/download))
 - [`OpenSSL`](https://www.openssl.org/) (required only when generating local certs with `npm run tls:gen`; not needed if you already have cert/key files)
 
+### Security First
+
+- Supported deployment: local machine access by default (loopback/localhost).
+- Supported (advanced): private-LAN access on trusted local networks with explicit allowlist controls.
+- Unsupported deployment: direct public internet exposure.
+- Remote internet exposure is unsupported.
+
+Deployment modes (choose one):
+
+- Localhost mode (recommended):
+  - Setup choices:
+    - `Allow LAN access from other local devices?` -> `No`
+    - `Trust proxy headers for client IP?` -> `No` (or `Yes` only when you intentionally run behind a trusted reverse proxy)
+    - `IP allowlist file path` -> leave default unless using trusted proxy mode
+  - Keep `JOBLIO_ALLOW_LAN=0` (default) and `HOST=127.0.0.1`.
+  - Use this mode for single-machine use.
+  - Use this mode for reverse proxy deployments.
+  - If using a trusted reverse proxy and needing real client IP handling:
+    configure `JOBLIO_IP_ALLOWLIST_PATH` first, verify it, and only then enable `JOBLIO_TRUST_PROXY=1`.
+  - See [Interactive Setup](#interactive-setup) and [Configuration Reference (`.joblio-data/config.env`)](#configuration-reference-joblio-dataconfigenv).
+
+- LAN mode (direct device access, advanced):
+  - Setup choices:
+    - `Allow LAN access from other local devices?` -> `Yes`
+    - `LAN bind host` -> specific private LAN interface IP (for example `192.168.1.25`)
+    - `IP allowlist file path` -> choose/create path
+    - `IP allowlist entries` -> include allowed device/subnet entries
+    - `Trust proxy headers for client IP?` -> `No`
+  - Set `JOBLIO_ALLOW_LAN=1`.
+  - Use a specific private interface bind host (no `0.0.0.0` / `::`).
+  - Set a non-empty `JOBLIO_IP_ALLOWLIST_PATH` pointing to a file with allowed client IP/CIDR entries (one per line or CSV) and at least one non-loopback entry.
+  - For one device, use exact IP or `/32` (example: `192.168.1.25` or `192.168.1.25/32`).
+  - `/24` allows the full subnet (example: `192.168.1.0/24` allows most `192.168.1.x` devices).
+  - Keep `JOBLIO_TRUST_PROXY=0`.
+  - See [Interactive Setup](#interactive-setup) and [Configuration Reference (`.joblio-data/config.env`)](#configuration-reference-joblio-dataconfigenv).
+
+- Run `npm run verify` after configuration changes.
+  - See [Reconfiguration](#reconfiguration) and [Recommended Flows](#recommended-flows).
+
 ### Quick Start
 
 ```sh
@@ -64,33 +103,7 @@ npm start
 ```
 
 Then open the HTTPS URL printed in your terminal and sign in with your configured Basic Auth credentials.
-Joblio is intended for local machine use by default. Optional LAN mode requiring explicit allowlist enforcement can be enabled during setup.
-
-### Security First
-
-- Supported deployment: local machine access by default (loopback/localhost).
-- Supported (advanced): private-LAN access on trusted local networks with explicit allowlist controls.
-- Unsupported deployment: direct public internet exposure.
-- Remote internet exposure is unsupported.
-
-Deployment modes (choose one):
-
-- Localhost mode (recommended):
-  - Keep `JOBLIO_ALLOW_LAN=0` (default) and `HOST=127.0.0.1`.
-  - Use this mode for single-machine use.
-  - Use this mode for reverse proxy deployments.
-  - If using a trusted reverse proxy and needing real client IP handling:
-    configure `JOBLIO_IP_ALLOWLIST_PATH` first, verify it, and only then enable `JOBLIO_TRUST_PROXY=1`.
-
-- LAN mode (direct device access, advanced):
-  - Set `JOBLIO_ALLOW_LAN=1`.
-  - Use a specific private interface bind host (no `0.0.0.0` / `::`).
-  - Set a non-empty `JOBLIO_IP_ALLOWLIST_PATH` pointing to a file with allowed client IP/CIDR entries (one per line or CSV) and at least one non-loopback entry.
-  - For one device, use exact IP or `/32` (example: `192.168.1.25` or `192.168.1.25/32`).
-  - `/24` allows the full subnet (example: `192.168.1.0/24` allows most `192.168.1.x` devices).
-  - Keep `JOBLIO_TRUST_PROXY=0`.
-
-- Run `npm run verify` after configuration changes.
+Default mode is local-machine only. Optional LAN mode can be enabled during setup with explicit allowlist enforcement.
 
 ### Installation
 
@@ -161,7 +174,7 @@ Check levels:
 
 ## Recommended Flows
 
-First-time setup and run (same as Quick Start):
+First-time setup and run:
 
 ```sh
 npm install
@@ -170,6 +183,8 @@ npm run tls:gen
 npm run setup
 npm start
 ```
+
+See [Quick Start](#quick-start) for clone + first run in one block.
 
 After configuration changes:
 
