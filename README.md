@@ -1,5 +1,5 @@
 # Joblio
-#TODO: Replace placeholder image
+
 A local, single-user job application tracker built to support my job search.
 
 ![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js)
@@ -9,7 +9,7 @@ A local, single-user job application tracker built to support my job search.
 > Do not expose it directly to the internet or public interfaces.
 > Internet/public deployment is outside supported security scope.
 
-<img src="docs/images/screenshot-placeholder.svg" alt="Joblio screenshot placeholder" width="600" />
+![example-page](docs/images/example-page.png)
 
 ## Table of Contents
 
