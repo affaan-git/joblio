@@ -6,7 +6,7 @@ A local, single-user job application tracker built to support my job search.
 ![JavaScript](https://img.shields.io/badge/JavaScript-ES6%2B-F7DF1E?logo=javascript)
 
 > WARNING: Joblio is built for local/private network use.
-> Do not expose it directly to the internet or public interfaces.
+> Do not expose it to public interfaces or directly to the internet.
 > Internet/public deployment is outside supported security scope.
 
 ![example-page](docs/images/example-page.png)
@@ -55,7 +55,7 @@ Issues during setup? Jump to [Troubleshooting](#troubleshooting).
 
 - Supported deployment: local machine access by default (loopback/localhost).
 - Supported (advanced): private-LAN access on trusted local networks with explicit allowlist controls.
-- Unsupported deployment: direct public internet exposure.
+- Unsupported deployment: public or internet exposure.
 - Remote internet exposure is unsupported.
 
 Deployment modes (choose one):
