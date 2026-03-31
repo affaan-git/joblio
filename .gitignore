@@ -1,5 +1,7 @@
 .joblio-data/
 backups/
+templates/resume/*
+!templates/resume/.gitkeep
 docker-data
 docker-backups
 node_modules/
