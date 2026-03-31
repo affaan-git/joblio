@@ -281,13 +281,13 @@ async function askInteractive(existing, options = {}) {
   const authLockoutRaw = await promptText('Auth lockout duration (ms)', String(defaultAuthLockoutMs));
   const authLockoutMs = parseIntInRange(authLockoutRaw, defaultAuthLockoutMs, 1000, 24 * 60 * 60 * 1000);
 
-  const defaultAuthBackoffBaseMs = parseIntInRange(existing.AUTH_BACKOFF_BASE_MS, 250, 0, 60000);
+  const defaultAuthBackoffBaseMs = parseIntInRange(existing.AUTH_BACKOFF_BASE_MS, 250, 1, 60000);
   const authBackoffBaseRaw = await promptText('Auth backoff base (ms)', String(defaultAuthBackoffBaseMs));
-  const authBackoffBaseMs = parseIntInRange(authBackoffBaseRaw, defaultAuthBackoffBaseMs, 0, 60000);
+  const authBackoffBaseMs = parseIntInRange(authBackoffBaseRaw, defaultAuthBackoffBaseMs, 1, 60000);
 
-  const defaultAuthBackoffMaxMs = parseIntInRange(existing.AUTH_BACKOFF_MAX_MS, 2000, 0, 60000);
+  const defaultAuthBackoffMaxMs = parseIntInRange(existing.AUTH_BACKOFF_MAX_MS, 2000, 1, 60000);
   const authBackoffMaxRaw = await promptText('Auth backoff max (ms)', String(defaultAuthBackoffMaxMs));
-  const authBackoffMaxMs = parseIntInRange(authBackoffMaxRaw, defaultAuthBackoffMaxMs, 0, 60000);
+  const authBackoffMaxMs = parseIntInRange(authBackoffMaxRaw, defaultAuthBackoffMaxMs, 1, 60000);
 
   const defaultAuthBackoffStartAfter = parseIntInRange(existing.AUTH_BACKOFF_START_AFTER, 2, 1, 1000);
   const authBackoffStartAfterRaw = await promptText('Auth backoff start after failures', String(defaultAuthBackoffStartAfter));
