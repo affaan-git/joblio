@@ -60,6 +60,27 @@ test('auth guard triggers lockout after threshold and clears on success', () => 
   assert.equal(clearState.locked, false);
 });
 
+test('auth guard rejects zero backoff and applies safe defaults', () => {
+  const guard = new AuthGuard({
+    windowMs: 60_000,
+    threshold: 3,
+    lockoutMs: 120_000,
+    backoffBaseMs: 0,
+    backoffMaxMs: 0,
+    backoffStartAfter: 2,
+  });
+  assert.ok(guard.backoffBaseMs > 0, 'backoffBaseMs must fall back to a positive default when given 0');
+  assert.ok(guard.backoffMaxMs > 0, 'backoffMaxMs must fall back to a positive default when given 0');
+
+  const ip = '127.0.0.1';
+  const user = 'test';
+  const t0 = 1_000_000;
+  guard.recordFailure(ip, user, t0);
+  guard.recordFailure(ip, user, t0 + 10);
+  const f3 = guard.recordFailure(ip, user, t0 + 20);
+  assert.ok(f3.delayMs > 0, 'backoff delay must be non-zero even when constructed with 0');
+});
+
 test('auth guard window expiry resets failure counter', () => {
   const guard = new AuthGuard({ windowMs: 1_000, threshold: 2, lockoutMs: 10_000, backoffBaseMs: 10, backoffMaxMs: 100, backoffStartAfter: 1 });
   const ip = '127.0.0.1';

@@ -74,6 +74,7 @@ const LOG_PREV_PATH = path.join(LOG_DIR, 'activity.log.1');
 const AUDIT_CHAIN_PATH = path.join(LOG_DIR, 'audit-chain.json');
 const SESSION_STORE_PATH = path.join(DATA_DIR, 'sessions.enc');
 const rateBuckets = new Map();
+let rateBucketsLastPruned = Date.now();
 const sessions = new Map();
 const authGuard = new AuthGuard({
   windowMs: AUTH_FAIL_WINDOW_MS,
@@ -588,6 +589,7 @@ function sanitizeTrashFile(file) {
 }
 
 function str(v, maxLen) {
+  if (typeof maxLen !== 'number') throw new Error('str() requires an explicit maxLen');
   if (typeof v !== 'string') return '';
   return v.length > maxLen ? v.slice(0, maxLen) : v;
 }
@@ -932,10 +934,11 @@ function enforceRateLimit(req, res, pathname) {
   const bucket = routeBucket(pathname, req.method || '');
   if (!bucket) return true;
   const now = Date.now();
-  if (rateBuckets.size > 5000) {
+  if (rateBuckets.size > 5000 || now - rateBucketsLastPruned > RATE_WINDOW_MS) {
     for (const [k, v] of rateBuckets.entries()) {
       if (!v || now >= v.resetAt) rateBuckets.delete(k);
     }
+    rateBucketsLastPruned = now;
   }
   const ip = getClientIp(req);
   const key = `${ip}:${bucket.key}`;
