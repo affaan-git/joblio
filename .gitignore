@@ -21,3 +21,6 @@ pnpm-debug.log*
 CLAUDE.md
 PROJECT_SUMARRY.md
 AGENTS/
+cookies.json
+logs/
+*.db

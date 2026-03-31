@@ -1233,11 +1233,11 @@ export function initJoblio() {
       drop.setAttribute("aria-label", "Upload workspace files");
       const openWorkspacePicker = () => fileInput.click();
       drop.addEventListener("click", (e) => {
-        if (e.target.closest(".workspace-files")) return;
+        if (e.target.closest(".file-tile")) return;
         openWorkspacePicker();
       });
       drop.addEventListener("touchend", (e) => {
-        if (e.target.closest(".workspace-files")) return;
+        if (e.target.closest(".file-tile")) return;
         e.preventDefault();
         openWorkspacePicker();
       }, { passive: false });
