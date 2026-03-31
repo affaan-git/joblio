@@ -587,7 +587,7 @@ function sanitizeTrashFile(file) {
   };
 }
 
-function str(v, maxLen = 4000) {
+function str(v, maxLen) {
   if (typeof v !== 'string') return '';
   return v.length > maxLen ? v.slice(0, maxLen) : v;
 }
@@ -1234,8 +1234,8 @@ async function handleApi(req, res, url) {
 
   if (req.method === 'POST' && url.pathname === '/api/files/upload') {
     const body = await readBody(req, MAX_UPLOAD_JSON_BYTES);
-    const appId = str(body.appId);
-    const fileName = str(body.name);
+    const appId = str(body.appId, 120);
+    const fileName = str(body.name, 255);
     const base64 = str(body.contentBase64, Math.ceil(MAX_FILE_BYTES * 4 / 3) + 4);
     if (!appId || !fileName || !base64) {
       return json(res, 400, { error: 'appId, name, contentBase64 are required' });
@@ -1259,21 +1259,27 @@ async function handleApi(req, res, url) {
       return json(res, 413, { error: `File too large (${buffer.byteLength} bytes). Limit: ${MAX_FILE_BYTES}` });
     }
     await fsp.writeFile(filePath, buffer);
-    const registered = await queueMutation(async () => {
-      const nextState = await readState();
-      const app = nextState.apps.find((a) => a.id === appId) || nextState.trashApps.find((a) => a.id === appId);
-      if (!app) return null;
-      if (!Array.isArray(app.workspaceFiles)) app.workspaceFiles = [];
-      if (!app.workspaceFiles.some((f) => f.id === id)) {
-        app.workspaceFiles.push({
-          id,
-          name: fileName,
-          type: str(body.type),
-          size: Number.isFinite(body.size) ? body.size : buffer.byteLength,
-        });
-      }
-      return writeState(nextState);
-    });
+    let registered;
+    try {
+      registered = await queueMutation(async () => {
+        const nextState = await readState();
+        const app = nextState.apps.find((a) => a.id === appId) || nextState.trashApps.find((a) => a.id === appId);
+        if (!app) return null;
+        if (!Array.isArray(app.workspaceFiles)) app.workspaceFiles = [];
+        if (!app.workspaceFiles.some((f) => f.id === id)) {
+          app.workspaceFiles.push({
+            id,
+            name: fileName,
+            type: str(body.type, 120),
+            size: Number.isFinite(body.size) ? body.size : buffer.byteLength,
+          });
+        }
+        return writeState(nextState);
+      });
+    } catch {
+      try { await fsp.unlink(filePath); } catch {}
+      throw new Error('Failed to register uploaded file');
+    }
     if (!registered) {
       try { await fsp.unlink(filePath); } catch {}
       return json(res, 400, { error: 'App not found when registering uploaded file' });
@@ -1283,7 +1289,7 @@ async function handleApi(req, res, url) {
       file: {
         id,
         name: fileName,
-        type: str(body.type),
+        type: str(body.type, 120),
         size: Number.isFinite(body.size) ? body.size : buffer.byteLength,
       },
       state: registered,
@@ -1348,7 +1354,7 @@ async function handleApi(req, res, url) {
     const fileId = restoreFileMatch[1];
     if (!isSafeId(fileId)) return json(res, 400, { error: 'Invalid file id' });
     const body = await readBody(req, MAX_JSON_BODY_BYTES);
-    const targetAppId = str(body.appId);
+    const targetAppId = str(body.appId, 120);
     const outcome = await queueMutation(async () => {
       const state = await readState();
       const idx = state.trashFiles.findIndex((f) => f.id === fileId);
