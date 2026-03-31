@@ -159,11 +159,12 @@ async function rotateLogIfNeeded() {
   try {
     const stat = await fsp.stat(LOG_PATH);
     if (stat.size < LOG_ROTATE_BYTES) return;
+    const chain = await readAuditChain();
     try {
       await fsp.unlink(LOG_PREV_PATH);
     } catch {}
     await fsp.rename(LOG_PATH, LOG_PREV_PATH);
-    await writeAuditChain({ lastHash: '', entries: 0, lastAt: '' });
+    await writeAuditChain({ lastHash: chain.lastHash, entries: 0, lastAt: '' });
   } catch {}
 }
 
@@ -828,7 +829,7 @@ function reqIsTlsExpected() {
   return process.env.JOBLIO_COOKIE_SECURE === '1' || transportIsTls;
 }
 
-function createSessionRecord(req) {
+async function createSessionRecord(req) {
   const sid = crypto.randomUUID();
   const now = Date.now();
   const createdAt = new Date(now).toISOString();
@@ -846,7 +847,7 @@ function createSessionRecord(req) {
   };
   sessions.set(sid, record);
   pruneExpiredSessions();
-  persistSessionStore();
+  await persistSessionStore();
   return record;
 }
 
@@ -1084,7 +1085,7 @@ async function handleApi(req, res, url) {
   if (req.method === 'POST' && url.pathname === '/api/auth/session') {
     if (!requireWriteAuth(req, res)) return;
     if (!enforceRateLimit(req, res, url.pathname)) return;
-    const session = createSessionRecord(req);
+    const session = await createSessionRecord(req);
     res.setHeader('Set-Cookie', makeSetCookie(session.sid, Math.floor(SESSION_TTL_MS / 1000)));
     return json(res, 200, {
       ok: true,
@@ -1105,7 +1106,7 @@ async function handleApi(req, res, url) {
 
   if (req.method === 'POST' && url.pathname === '/api/auth/logout') {
     sessions.delete(session.sid);
-    persistSessionStore();
+    await persistSessionStore();
     res.setHeader('Set-Cookie', makeSetCookie('', 0));
     return json(res, 200, { ok: true, at: new Date().toISOString() });
   }
