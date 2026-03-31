@@ -1235,7 +1235,7 @@ async function handleApi(req, res, url) {
     const body = await readBody(req, MAX_UPLOAD_JSON_BYTES);
     const appId = str(body.appId);
     const fileName = str(body.name);
-    const base64 = str(body.contentBase64);
+    const base64 = str(body.contentBase64, Math.ceil(MAX_FILE_BYTES * 4 / 3) + 4);
     if (!appId || !fileName || !base64) {
       return json(res, 400, { error: 'appId, name, contentBase64 are required' });
     }
