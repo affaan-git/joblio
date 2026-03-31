@@ -1057,15 +1057,15 @@ export function initJoblio() {
             <div class="grid-2">
               <div class="field">
                 <label class="label">Role title</label>
-                <input id="fTitle" type="text" value="${escapeHtml(app.title)}" />
+                <input id="fTitle" type="text" maxlength="180" value="${escapeHtml(app.title)}" />
               </div>
               <div class="field">
                 <label class="label">Company</label>
-                <input id="fCompany" type="text" value="${escapeHtml(app.company)}" />
+                <input id="fCompany" type="text" maxlength="180" value="${escapeHtml(app.company)}" />
               </div>
               <div class="field">
                 <label class="label">Location</label>
-                <input id="fLocation" type="text" value="${escapeHtml(app.location || "")}" />
+                <input id="fLocation" type="text" maxlength="180" value="${escapeHtml(app.location || "")}" />
               </div>
               <div class="field">
                 <label class="label">Work mode</label>
@@ -1096,13 +1096,13 @@ export function initJoblio() {
             <div class="muted-help">Paste the full job posting text to keep with this application.</div>
             <div class="field">
               <label class="label" for="descriptionInput">Description</label>
-              <textarea id="descriptionInput" placeholder="Paste job posting text, requirements, compensation details, and links...">${escapeHtml(app.descriptionText || "")}</textarea>
+              <textarea id="descriptionInput" maxlength="200000" placeholder="Paste job posting text, requirements, compensation details, and links...">${escapeHtml(app.descriptionText || "")}</textarea>
             </div>
           </section>
 
           <section class="section area-note">
             <div class="section-title">Sticky note</div>
-            <textarea id="noteInput" placeholder="Use this space to jot down quick thoughts for ${escapeHtml(app.title)} at ${escapeHtml(app.company)}">${escapeHtml(app.note || "")}</textarea>
+            <textarea id="noteInput" maxlength="20000" placeholder="Use this space to jot down quick thoughts for ${escapeHtml(app.title)} at ${escapeHtml(app.company)}">${escapeHtml(app.note || "")}</textarea>
           </section>
 
           <section class="section area-links">
@@ -1110,11 +1110,11 @@ export function initJoblio() {
             <div class="links-stack">
               <div class="field">
                 <label class="label">Listing URL</label>
-                <input id="fJobUrl" type="url" value="${escapeHtml(app.jobUrl || "")}" />
+                <input id="fJobUrl" type="url" maxlength="500" value="${escapeHtml(app.jobUrl || "")}" />
               </div>
               <div class="field">
                 <label class="label">Application URL</label>
-                <input id="fAppUrl" type="url" value="${escapeHtml(app.applicationUrl || "")}" />
+                <input id="fAppUrl" type="url" maxlength="500" value="${escapeHtml(app.applicationUrl || "")}" />
               </div>
             </div>
           </section>
