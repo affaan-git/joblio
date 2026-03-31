@@ -51,8 +51,8 @@ function evaluatePreflight(env = process.env) {
   if (authFailWindowMs <= 0 || authFailThreshold <= 0 || authLockoutMs <= 0) {
     issues.push('AUTH_FAIL_WINDOW_MS, AUTH_FAIL_THRESHOLD, and AUTH_LOCKOUT_MS must be greater than 0.');
   }
-  if (authBackoffBaseMs < 0 || authBackoffMaxMs < 0 || authBackoffStartAfter <= 0) {
-    issues.push('AUTH_BACKOFF_BASE_MS, AUTH_BACKOFF_MAX_MS, and AUTH_BACKOFF_START_AFTER must be valid positive values.');
+  if (authBackoffBaseMs <= 0 || authBackoffMaxMs <= 0 || authBackoffStartAfter <= 0) {
+    issues.push('AUTH_BACKOFF_BASE_MS, AUTH_BACKOFF_MAX_MS, and AUTH_BACKOFF_START_AFTER must be greater than 0.');
   }
   if (authBackoffBaseMs > authBackoffMaxMs) {
     issues.push('AUTH_BACKOFF_BASE_MS must be less than or equal to AUTH_BACKOFF_MAX_MS.');
