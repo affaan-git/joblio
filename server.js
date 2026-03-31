@@ -587,7 +587,7 @@ function sanitizeTrashFile(file) {
   };
 }
 
-function str(v, maxLen = 4000) {
+function str(v, maxLen) {
   if (typeof v !== 'string') return '';
   return v.length > maxLen ? v.slice(0, maxLen) : v;
 }
@@ -1234,8 +1234,8 @@ async function handleApi(req, res, url) {
 
   if (req.method === 'POST' && url.pathname === '/api/files/upload') {
     const body = await readBody(req, MAX_UPLOAD_JSON_BYTES);
-    const appId = str(body.appId);
-    const fileName = str(body.name);
+    const appId = str(body.appId, 120);
+    const fileName = str(body.name, 255);
     const base64 = str(body.contentBase64, Math.ceil(MAX_FILE_BYTES * 4 / 3) + 4);
     if (!appId || !fileName || !base64) {
       return json(res, 400, { error: 'appId, name, contentBase64 are required' });
@@ -1270,7 +1270,7 @@ async function handleApi(req, res, url) {
           app.workspaceFiles.push({
             id,
             name: fileName,
-            type: str(body.type),
+            type: str(body.type, 120),
             size: Number.isFinite(body.size) ? body.size : buffer.byteLength,
           });
         }
@@ -1289,7 +1289,7 @@ async function handleApi(req, res, url) {
       file: {
         id,
         name: fileName,
-        type: str(body.type),
+        type: str(body.type, 120),
         size: Number.isFinite(body.size) ? body.size : buffer.byteLength,
       },
       state: registered,
@@ -1354,7 +1354,7 @@ async function handleApi(req, res, url) {
     const fileId = restoreFileMatch[1];
     if (!isSafeId(fileId)) return json(res, 400, { error: 'Invalid file id' });
     const body = await readBody(req, MAX_JSON_BODY_BYTES);
-    const targetAppId = str(body.appId);
+    const targetAppId = str(body.appId, 120);
     const outcome = await queueMutation(async () => {
       const state = await readState();
       const idx = state.trashFiles.findIndex((f) => f.id === fileId);
