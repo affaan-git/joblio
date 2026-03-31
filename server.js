@@ -1259,21 +1259,27 @@ async function handleApi(req, res, url) {
       return json(res, 413, { error: `File too large (${buffer.byteLength} bytes). Limit: ${MAX_FILE_BYTES}` });
     }
     await fsp.writeFile(filePath, buffer);
-    const registered = await queueMutation(async () => {
-      const nextState = await readState();
-      const app = nextState.apps.find((a) => a.id === appId) || nextState.trashApps.find((a) => a.id === appId);
-      if (!app) return null;
-      if (!Array.isArray(app.workspaceFiles)) app.workspaceFiles = [];
-      if (!app.workspaceFiles.some((f) => f.id === id)) {
-        app.workspaceFiles.push({
-          id,
-          name: fileName,
-          type: str(body.type),
-          size: Number.isFinite(body.size) ? body.size : buffer.byteLength,
-        });
-      }
-      return writeState(nextState);
-    });
+    let registered;
+    try {
+      registered = await queueMutation(async () => {
+        const nextState = await readState();
+        const app = nextState.apps.find((a) => a.id === appId) || nextState.trashApps.find((a) => a.id === appId);
+        if (!app) return null;
+        if (!Array.isArray(app.workspaceFiles)) app.workspaceFiles = [];
+        if (!app.workspaceFiles.some((f) => f.id === id)) {
+          app.workspaceFiles.push({
+            id,
+            name: fileName,
+            type: str(body.type),
+            size: Number.isFinite(body.size) ? body.size : buffer.byteLength,
+          });
+        }
+        return writeState(nextState);
+      });
+    } catch {
+      try { await fsp.unlink(filePath); } catch {}
+      throw new Error('Failed to register uploaded file');
+    }
     if (!registered) {
       try { await fsp.unlink(filePath); } catch {}
       return json(res, 400, { error: 'App not found when registering uploaded file' });
