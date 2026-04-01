@@ -454,7 +454,8 @@ function snapshotStamp() {
   const hh = String(d.getUTCHours()).padStart(2, '0');
   const mi = String(d.getUTCMinutes()).padStart(2, '0');
   const ss = String(d.getUTCSeconds()).padStart(2, '0');
-  return `${yyyy}${mm}${dd}-${hh}${mi}${ss}`;
+  const ms = String(d.getUTCMilliseconds()).padStart(3, '0');
+  return `${yyyy}${mm}${dd}-${hh}${mi}${ss}-${ms}`;
 }
 
 async function snapshotCurrentState() {
