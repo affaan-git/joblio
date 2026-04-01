@@ -55,6 +55,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(`Startup failed: ${err?.message || String(err)}`);
+  console.error(`Startup failed [${err?.code || err?.name || 'Error'}]. Check configuration and run preflight.`);
   process.exit(1);
 });

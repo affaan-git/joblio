@@ -89,7 +89,7 @@ async function main() {
   const sourceDir = resolveRestoreSource(backupPath, topDir);
   if (!sourceDir) {
     // eslint-disable-next-line no-console
-    console.error(`Restore source not found or invalid: ${backupPath}`);
+    console.error('Restore source not found or invalid. Verify the backup path exists and contains valid data.');
     process.exit(1);
   }
 
@@ -102,7 +102,7 @@ async function main() {
 if (require.main === module) {
   main().catch((err) => {
     // eslint-disable-next-line no-console
-    console.error(`Restore failed: ${err?.message || String(err)}`);
+    console.error(`Restore failed [${err?.code || err?.name || 'Error'}]. Verify backup path and integrity.`);
     process.exit(1);
   });
 }
