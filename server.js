@@ -8,10 +8,10 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { verifyPassword } = require('./lib/auth');
 const { AuthGuard } = require('./lib/auth-guard');
-const { normalizeIp, isIpAllowed, isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('./lib/ip-allowlist');
-const { isLoopbackHost, isWildcardHost, isPrivateOrLoopbackHost } = require('./lib/network-policy');
+const { normalizeIp, isIpAllowed } = require('./lib/ip-allowlist');
 const { validateTemplateConfig, DEFAULT_MAX_TEMPLATE_BYTES } = require('./lib/template-registry');
 const { loadAllowlistFromEnvSync } = require('./lib/allowlist-source');
+const { validateNetworkPolicy } = require('./lib/validate-network');
 
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 8787);
@@ -173,29 +173,9 @@ function validateStartupConfig() {
   if (ALLOWLIST_SOURCE.issues.length) {
     throw new Error(`Invalid allowlist source: ${ALLOWLIST_SOURCE.issues.join('; ')}`);
   }
-  if (!JOBLIO_ALLOW_LAN && !isLoopbackHost(HOST)) {
-    throw new Error('Refusing non-local bind host while JOBLIO_ALLOW_LAN=0. Set HOST=127.0.0.1 or enable JOBLIO_ALLOW_LAN=1.');
-  }
-  if (JOBLIO_ALLOW_LAN) {
-    if (isWildcardHost(HOST)) {
-      throw new Error('Refusing wildcard host in LAN mode. Use a specific private interface IP.');
-    }
-    if (!isPrivateOrLoopbackHost(HOST)) {
-      throw new Error(`Refusing non-private host in LAN mode: ${HOST}`);
-    }
-    if (!IP_ALLOWLIST.length) {
-      throw new Error('JOBLIO_ALLOW_LAN=1 requires a non-empty allowlist (set JOBLIO_IP_ALLOWLIST_PATH).');
-    }
-    if (!hasNonLoopbackAllowlistEntry(IP_ALLOWLIST)) {
-      throw new Error('JOBLIO_ALLOW_LAN=1 requires at least one non-loopback allowlist entry.');
-    }
-    const unsafe = IP_ALLOWLIST.find((entry) => !isSafeAllowlistEntry(entry));
-    if (unsafe) {
-      throw new Error('Unsupported or unsafe allowlist entry in LAN mode. Only private/loopback IPv4 ranges and exact addresses are allowed.');
-    }
-    if (TRUST_PROXY) {
-      throw new Error('JOBLIO_ALLOW_LAN=1 requires JOBLIO_TRUST_PROXY=0 unless explicitly redesigned for a trusted proxy.');
-    }
+  const netCheck = validateNetworkPolicy({ host: HOST, allowLan: JOBLIO_ALLOW_LAN, trustProxy: TRUST_PROXY, allowlist: IP_ALLOWLIST });
+  if (netCheck.issues.length) {
+    throw new Error(netCheck.issues[0]);
   }
   if (!API_TOKEN) {
     throw new Error('JOBLIO_API_TOKEN is required.');
@@ -220,9 +200,6 @@ function validateStartupConfig() {
   }
   if (AUTH_GUARD_MAX_ENTRIES <= 0) {
     throw new Error('AUTH_GUARD_MAX_ENTRIES must be > 0');
-  }
-  if (TRUST_PROXY && !IP_ALLOWLIST.length) {
-    throw new Error('JOBLIO_TRUST_PROXY=1 requires a non-empty allowlist.');
   }
   if (!TLS_CERT_PATH || !TLS_KEY_PATH) {
     throw new Error('TLS enabled but JOBLIO_TLS_CERT_PATH or JOBLIO_TLS_KEY_PATH is missing.');

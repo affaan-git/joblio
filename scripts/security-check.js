@@ -4,9 +4,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { parseEnvText } = require('../lib/env-file');
-const { isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('../lib/ip-allowlist');
 const { loadAllowlistFromEnvSync } = require('../lib/allowlist-source');
-const { isLoopbackHost, isWildcardHost, isPrivateOrLoopbackHost } = require('../lib/network-policy');
+const { validateNetworkPolicy } = require('../lib/validate-network');
 const { validateTemplateConfig, DEFAULT_MAX_TEMPLATE_BYTES } = require('../lib/template-registry');
 
 const root = path.resolve(__dirname, '..');
@@ -36,13 +35,7 @@ function evaluateSecurityCheck(envOverride = null) {
   }
   const host = String(env.HOST || '').trim().toLowerCase();
   const allowLan = String(env.JOBLIO_ALLOW_LAN || '0') === '1';
-  if (!allowLan && !isLoopbackHost(host)) {
-    issues.push(`HOST must be localhost when JOBLIO_ALLOW_LAN=0. Current: ${env.HOST || '(unset)'}`);
-  }
-  if (allowLan) {
-    if (isWildcardHost(host)) issues.push('LAN mode forbids wildcard bind hosts (0.0.0.0/::). Use a specific private interface IP.');
-    if (!isPrivateOrLoopbackHost(host)) issues.push(`LAN mode requires a private/loopback host. Current: ${env.HOST || '(unset)'}`);
-  }
+  const trustProxy = String(env.JOBLIO_TRUST_PROXY || '0') === '1';
 
   if (!String(env.JOBLIO_API_TOKEN || '').trim()) {
     issues.push('JOBLIO_API_TOKEN is missing.');
@@ -74,24 +67,10 @@ function evaluateSecurityCheck(envOverride = null) {
   loadedAllowlist.issues.forEach((issue) => issues.push(issue));
   loadedAllowlist.warns.forEach((w) => warns.push(w));
   const parsedAllowlist = loadedAllowlist.entries;
-  if (String(env.JOBLIO_TRUST_PROXY || '0') === '1' && !parsedAllowlist.length) {
-    issues.push('JOBLIO_TRUST_PROXY=1 requires a non-empty allowlist.');
-  }
-  if (allowLan && !parsedAllowlist.length) {
-    issues.push('JOBLIO_ALLOW_LAN=1 requires a non-empty allowlist.');
-  }
-  if (allowLan && parsedAllowlist.length && !hasNonLoopbackAllowlistEntry(parsedAllowlist)) {
-    issues.push('JOBLIO_ALLOW_LAN=1 requires at least one non-loopback allowlist entry.');
-  }
-  if (allowLan && String(env.JOBLIO_TRUST_PROXY || '0') === '1') {
-    issues.push('JOBLIO_ALLOW_LAN=1 requires JOBLIO_TRUST_PROXY=0 unless explicitly redesigned for trusted proxy chains.');
-  }
-  if (allowLan) {
-    const unsafe = parsedAllowlist.find((entry) => !isSafeAllowlistEntry(entry));
-    if (unsafe) {
-      issues.push('Unsupported or unsafe allowlist entry in LAN mode. Only private/loopback IPv4 ranges and exact addresses are allowed.');
-    }
-  }
+
+  const netCheck = validateNetworkPolicy({ host, allowLan, trustProxy, allowlist: parsedAllowlist });
+  netCheck.issues.forEach((i) => issues.push(i));
+  netCheck.warns.forEach((w) => warns.push(w));
 
   if (String((envOverride ? env.NODE_TLS_REJECT_UNAUTHORIZED : process.env.NODE_TLS_REJECT_UNAUTHORIZED) || '') === '0') {
     issues.push('NODE_TLS_REJECT_UNAUTHORIZED=0 is unsafe and must not be set.');
