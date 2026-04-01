@@ -28,7 +28,7 @@ export function createInitialState() {
     scrollListToActive: false,
     pendingDescriptionFocusId: null,
     search: "",
-    sortBy: "recent_update",
+    sortBy: "newest_first",
     statusFilter: "all",
     modeFilter: "all",
     theme: "dark",

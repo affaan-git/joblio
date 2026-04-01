@@ -276,7 +276,7 @@ export function initJoblio() {
       mobileSortInline.value = state.sortBy;
       mobileStatusInline.value = state.statusFilter;
       mobileModeInline.value = state.modeFilter;
-      mobileSortInline.classList.toggle("is-active", state.sortBy !== "recent_update");
+      mobileSortInline.classList.toggle("is-active", state.sortBy !== "newest_first");
       mobileStatusInline.classList.toggle("is-active", state.statusFilter !== "all");
       mobileModeInline.classList.toggle("is-active", state.modeFilter !== "all");
     }
