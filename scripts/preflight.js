@@ -3,10 +3,9 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('../lib/ip-allowlist');
 const { loadAllowlistFromEnvSync } = require('../lib/allowlist-source');
-const { isLoopbackHost, isWildcardHost, isPrivateOrLoopbackHost } = require('../lib/network-policy');
-const { validateTemplateConfig } = require('../lib/template-registry');
+const { validateNetworkPolicy } = require('../lib/validate-network');
+const { validateTemplateConfig, DEFAULT_MAX_TEMPLATE_BYTES } = require('../lib/template-registry');
 
 const root = path.resolve(__dirname, '..');
 
@@ -34,14 +33,6 @@ function evaluatePreflight(env = process.env) {
   const issues = [];
   const warns = [];
 
-  if (!allowLan && !isLoopbackHost(host)) {
-    issues.push(`HOST=${host} is not local while JOBLIO_ALLOW_LAN=0. Use HOST=127.0.0.1 or enable JOBLIO_ALLOW_LAN=1.`);
-  }
-  if (allowLan) {
-    if (isWildcardHost(host)) issues.push(`HOST=${host} is wildcard. Use a specific private interface IP in LAN mode.`);
-    if (!isPrivateOrLoopbackHost(host)) issues.push(`HOST=${host} is not private/loopback. LAN mode requires a private bind host.`);
-  }
-
   if (!token) issues.push('JOBLIO_API_TOKEN is required.');
   if (!basicUser || !basicHash) issues.push('JOBLIO_BASIC_AUTH_USER and JOBLIO_BASIC_AUTH_HASH are required.');
   if (!tlsCert || !tlsKey) issues.push('HTTPS requires JOBLIO_TLS_CERT_PATH and JOBLIO_TLS_KEY_PATH.');
@@ -63,27 +54,10 @@ function evaluatePreflight(env = process.env) {
   loadedAllowlist.issues.forEach((issue) => issues.push(issue));
   loadedAllowlist.warns.forEach((w) => warns.push(w));
   const parsedAllowlist = loadedAllowlist.entries;
-  if (!allowLan && parsedAllowlist.length && !trustProxy) {
-    warns.push('IP allowlist is enabled while JOBLIO_TRUST_PROXY=0. Only socket remoteAddress will be used for IP checks.');
-  }
-  if (trustProxy && !parsedAllowlist.length) {
-    issues.push('JOBLIO_TRUST_PROXY=1 requires a non-empty allowlist.');
-  }
-  if (allowLan && !parsedAllowlist.length) {
-    issues.push('JOBLIO_ALLOW_LAN=1 requires a non-empty allowlist.');
-  }
-  if (allowLan && parsedAllowlist.length && !hasNonLoopbackAllowlistEntry(parsedAllowlist)) {
-    issues.push('JOBLIO_ALLOW_LAN=1 requires at least one non-loopback allowlist entry.');
-  }
-  if (allowLan && trustProxy) {
-    issues.push('JOBLIO_ALLOW_LAN=1 requires JOBLIO_TRUST_PROXY=0 unless you intentionally redesign for a trusted proxy chain.');
-  }
-  if (allowLan) {
-    const unsafe = parsedAllowlist.find((entry) => !isSafeAllowlistEntry(entry));
-    if (unsafe) {
-      issues.push('Unsupported or unsafe allowlist entry for LAN mode. Only private/loopback IPv4 ranges and exact addresses are allowed.');
-    }
-  }
+
+  const netCheck = validateNetworkPolicy({ host, allowLan, trustProxy, allowlist: parsedAllowlist });
+  netCheck.issues.forEach((i) => issues.push(i));
+  netCheck.warns.forEach((w) => warns.push(w));
 
   try {
     fs.mkdirSync(dataDir, { recursive: true });
@@ -92,7 +66,7 @@ function evaluatePreflight(env = process.env) {
     issues.push(`Data directory is not readable/writable: ${dataDir}`);
   }
 
-  const templateCheck = validateTemplateConfig(resumeTemplatesRaw, templateRoot, { requireExisting: true, maxBytes: 10 * 1024 * 1024 });
+  const templateCheck = validateTemplateConfig(resumeTemplatesRaw, templateRoot, { requireExisting: true, maxBytes: DEFAULT_MAX_TEMPLATE_BYTES });
   if (templateCheck.issues.length) {
     templateCheck.issues.forEach((i) => issues.push(i));
   }
