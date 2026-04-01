@@ -31,7 +31,7 @@ async function main() {
 
   if (!fs.existsSync(dataDir) || !fs.statSync(dataDir).isDirectory()) {
     // eslint-disable-next-line no-console
-    console.error(`No data directory found at ${dataDir}`);
+    console.error('No data directory found. Run `npm run setup` first.');
     process.exit(1);
   }
 
@@ -45,7 +45,7 @@ async function main() {
 if (require.main === module) {
   main().catch((err) => {
     // eslint-disable-next-line no-console
-    console.error(`Backup failed: ${err?.message || String(err)}`);
+    console.error(`Backup failed [${err?.code || err?.name || 'Error'}]. Check data directory and permissions.`);
     process.exit(1);
   });
 }

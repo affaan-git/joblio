@@ -137,7 +137,7 @@ async function ensureAllowlistFile(pathRaw, context = {}) {
   try {
     const stat = await fsp.stat(resolvedPath);
     if (!stat.isFile()) {
-      throw new Error(`IP allowlist path is not a file: ${trimmed}`);
+      throw new Error('IP allowlist path exists but is not a file.');
     }
     return;
   } catch (err) {
@@ -232,7 +232,7 @@ async function askInteractive(existing, options = {}) {
     host = sanitizeValue(lanHostRaw || defaultLanHost);
     if (!host) throw new Error('LAN bind host is required when LAN mode is enabled.');
     if (isWildcardHost(host)) throw new Error('Wildcard bind host is not allowed in LAN mode.');
-    if (!isPrivateOrLoopbackHost(host)) throw new Error(`LAN bind host must be private/loopback. Got: ${host}`);
+    if (!isPrivateOrLoopbackHost(host)) throw new Error('LAN bind host must be a private or loopback address.');
     if (isLoopbackHost(host)) {
       throw new Error('LAN mode requires a non-loopback private interface IP to be reachable from other devices.');
     }
@@ -263,10 +263,10 @@ async function askInteractive(existing, options = {}) {
     throw new Error('TLS cert and key paths are required.');
   }
   if (!fs.existsSync(path.resolve(certPath))) {
-    throw new Error(`TLS cert not found: ${certPath}`);
+    throw new Error('TLS cert not found at the specified path.');
   }
   if (!fs.existsSync(path.resolve(keyPath))) {
-    throw new Error(`TLS key not found: ${keyPath}`);
+    throw new Error('TLS key not found at the specified path.');
   }
 
   const defaultRateAuthSession = parseIntInRange(existing.RATE_MAX_AUTH_SESSION, 45, 1, 100000);
@@ -347,7 +347,7 @@ async function askInteractive(existing, options = {}) {
   if (allowLan === '1') {
     const unsafeEntry = parsedAllowlist.find((entry) => !isSafeAllowlistEntry(entry));
     if (unsafeEntry) {
-      throw new Error(`Unsafe IP allowlist entry for LAN mode: ${unsafeEntry}`);
+      throw new Error('Unsafe IP allowlist entry detected for LAN mode. Only private/loopback ranges are allowed.');
     }
   }
   if (allowLan === '1' || trustProxy === '1') {
@@ -457,7 +457,7 @@ function buildConfigEnv(result) {
 function runValidationStep(name, args, env) {
   const run = spawnSync(process.execPath, args, { cwd: root, env, stdio: 'inherit' });
   if (run.error) {
-    throw new Error(`${name} failed: ${run.error.message}`);
+    throw new Error(`${name} failed to execute.`);
   }
   if (run.status !== 0) {
     throw new Error(`${name} failed (exit ${run.status}).`);

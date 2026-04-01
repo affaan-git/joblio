@@ -120,7 +120,7 @@ async function rebuildFrontend() {
     await runFrontendBuild();
     console.log('[dev] Frontend bundle updated.');
   } catch (err) {
-    console.error(`[dev] ${err?.message || String(err)}`);
+    console.error(`[dev] Frontend build failed [${err?.code || err?.name || 'Error'}].`);
   } finally {
     building = false;
     if (rebuildQueued) {
@@ -227,6 +227,6 @@ process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
 main().catch((err) => {
-  console.error(`[dev] Failed to start: ${err?.message || String(err)}`);
+  console.error(`[dev] Failed to start [${err?.code || err?.name || 'Error'}]. Check configuration.`);
   process.exit(1);
 });
