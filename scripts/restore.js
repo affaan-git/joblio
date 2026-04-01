@@ -35,7 +35,7 @@ async function replaceDirAtomic(targetDir, sourceDir) {
   }
 }
 
-async function assertNoSymlinks(rootDir, topDirName) {
+async function assertNoSymlinks(rootDir, _topDirName) {
   const stack = [rootDir];
   while (stack.length) {
     const current = stack.pop();
@@ -43,8 +43,7 @@ async function assertNoSymlinks(rootDir, topDirName) {
     for (const entry of entries) {
       const full = path.join(current, entry.name);
       if (entry.isSymbolicLink()) {
-        const rel = path.relative(rootDir, full).replace(/\\/g, '/');
-        throw new Error(`Backup contains unsupported symbolic link: ${topDirName}/${rel}`);
+        throw new Error('Backup contains unsupported symbolic link. Remove symlinks from the backup and retry.');
       }
       if (entry.isDirectory()) {
         stack.push(full);

@@ -347,7 +347,7 @@ async function askInteractive(existing, options = {}) {
   if (allowLan === '1') {
     const unsafeEntry = parsedAllowlist.find((entry) => !isSafeAllowlistEntry(entry));
     if (unsafeEntry) {
-      throw new Error('Unsafe IP allowlist entry detected for LAN mode. Only private/loopback ranges are allowed.');
+      throw new Error('Unsupported or unsafe allowlist entry for LAN mode. Only private/loopback IPv4 ranges and exact addresses are allowed.');
     }
   }
   if (allowLan === '1' || trustProxy === '1') {
