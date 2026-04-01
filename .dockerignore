@@ -21,3 +21,11 @@ pnpm-debug.log*
 *.swp
 *.bak
 *.orig
+CLAUDE.md
+PROJECT_SUMARRY.md
+AGENTS
+templates/resume/*
+!templates/resume/.gitkeep
+cookies.json
+logs
+*.db
