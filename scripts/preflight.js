@@ -6,7 +6,7 @@ const path = require('node:path');
 const { isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('../lib/ip-allowlist');
 const { loadAllowlistFromEnvSync } = require('../lib/allowlist-source');
 const { isLoopbackHost, isWildcardHost, isPrivateOrLoopbackHost } = require('../lib/network-policy');
-const { validateTemplateConfig } = require('../lib/template-registry');
+const { validateTemplateConfig, DEFAULT_MAX_TEMPLATE_BYTES } = require('../lib/template-registry');
 
 const root = path.resolve(__dirname, '..');
 
@@ -92,7 +92,7 @@ function evaluatePreflight(env = process.env) {
     issues.push(`Data directory is not readable/writable: ${dataDir}`);
   }
 
-  const templateCheck = validateTemplateConfig(resumeTemplatesRaw, templateRoot, { requireExisting: true, maxBytes: 10 * 1024 * 1024 });
+  const templateCheck = validateTemplateConfig(resumeTemplatesRaw, templateRoot, { requireExisting: true, maxBytes: DEFAULT_MAX_TEMPLATE_BYTES });
   if (templateCheck.issues.length) {
     templateCheck.issues.forEach((i) => issues.push(i));
   }

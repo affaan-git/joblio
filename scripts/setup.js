@@ -13,7 +13,7 @@ const { parseEnvText } = require('../lib/env-file');
 const { isLoopbackHost, isPrivateOrLoopbackHost, isWildcardHost } = require('../lib/network-policy');
 const { parseAllowlist, isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('../lib/ip-allowlist');
 const { loadAllowlistFromEnvSync } = require('../lib/allowlist-source');
-const { validateTemplateConfig } = require('../lib/template-registry');
+const { validateTemplateConfig, DEFAULT_MAX_TEMPLATE_BYTES } = require('../lib/template-registry');
 
 const root = path.resolve(__dirname, '..');
 const dataDir = path.join(root, '.joblio-data');
@@ -357,7 +357,7 @@ async function askInteractive(existing, options = {}) {
   const defaultResumeTemplates = sanitizeValue(existing.JOBLIO_RESUME_TEMPLATES || '');
   const resumeTemplatesRaw = await promptText('Resume template paths (CSV, relative to templates/resume). Leave blank to disable.', defaultResumeTemplates);
   const resumeTemplates = sanitizeValue(resumeTemplatesRaw);
-  const templateCheck = validateTemplateConfig(resumeTemplates, resumeTemplateRoot, { requireExisting: true, maxBytes: 10 * 1024 * 1024 });
+  const templateCheck = validateTemplateConfig(resumeTemplates, resumeTemplateRoot, { requireExisting: true, maxBytes: DEFAULT_MAX_TEMPLATE_BYTES });
   if (templateCheck.issues.length) {
     throw new Error(templateCheck.issues.join('; '));
   }

@@ -7,7 +7,7 @@ const { parseEnvText } = require('../lib/env-file');
 const { isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('../lib/ip-allowlist');
 const { loadAllowlistFromEnvSync } = require('../lib/allowlist-source');
 const { isLoopbackHost, isWildcardHost, isPrivateOrLoopbackHost } = require('../lib/network-policy');
-const { validateTemplateConfig } = require('../lib/template-registry');
+const { validateTemplateConfig, DEFAULT_MAX_TEMPLATE_BYTES } = require('../lib/template-registry');
 
 const root = path.resolve(__dirname, '..');
 const configPath = path.join(root, '.joblio-data', 'config.env');
@@ -102,7 +102,7 @@ function evaluateSecurityCheck(envOverride = null) {
   }
 
   const templateRoot = path.join(root, 'templates', 'resume');
-  const templateCheck = validateTemplateConfig(String(env.JOBLIO_RESUME_TEMPLATES || ''), templateRoot, { requireExisting: true, maxBytes: 10 * 1024 * 1024 });
+  const templateCheck = validateTemplateConfig(String(env.JOBLIO_RESUME_TEMPLATES || ''), templateRoot, { requireExisting: true, maxBytes: DEFAULT_MAX_TEMPLATE_BYTES });
   if (templateCheck.issues.length) {
     templateCheck.issues.forEach((i) => issues.push(i));
   }

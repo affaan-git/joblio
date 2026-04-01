@@ -10,7 +10,7 @@ const { verifyPassword } = require('./lib/auth');
 const { AuthGuard } = require('./lib/auth-guard');
 const { normalizeIp, isIpAllowed, isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('./lib/ip-allowlist');
 const { isLoopbackHost, isWildcardHost, isPrivateOrLoopbackHost } = require('./lib/network-policy');
-const { validateTemplateConfig } = require('./lib/template-registry');
+const { validateTemplateConfig, DEFAULT_MAX_TEMPLATE_BYTES } = require('./lib/template-registry');
 const { loadAllowlistFromEnvSync } = require('./lib/allowlist-source');
 
 const HOST = process.env.HOST || '127.0.0.1';
@@ -29,7 +29,7 @@ const LOG_DIR = path.join(DATA_DIR, 'logs');
 const STATE_PATH = path.join(DATA_DIR, 'state.json');
 const APP_HTML = path.join(ROOT_DIR, 'Joblio.html');
 const RESUME_TEMPLATES_RAW = process.env.JOBLIO_RESUME_TEMPLATES || '';
-const MAX_TEMPLATE_BYTES = Number(process.env.MAX_TEMPLATE_BYTES || 10 * 1024 * 1024);
+const MAX_TEMPLATE_BYTES = Number(process.env.MAX_TEMPLATE_BYTES || DEFAULT_MAX_TEMPLATE_BYTES);
 const MAX_JSON_BODY_BYTES = Number(process.env.MAX_JSON_BODY_BYTES || 5 * 1024 * 1024);
 const MAX_UPLOAD_JSON_BYTES = Number(process.env.MAX_UPLOAD_JSON_BYTES || 35 * 1024 * 1024);
 const MAX_FILE_BYTES = Number(process.env.MAX_FILE_BYTES || 25 * 1024 * 1024);
