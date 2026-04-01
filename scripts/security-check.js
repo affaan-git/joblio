@@ -89,7 +89,7 @@ function evaluateSecurityCheck(envOverride = null) {
   if (allowLan) {
     const unsafe = parsedAllowlist.find((entry) => !isSafeAllowlistEntry(entry));
     if (unsafe) {
-      issues.push(`Unsafe allowlist entry in LAN mode: ${unsafe}`);
+      issues.push('Unsupported or unsafe allowlist entry in LAN mode. Only private/loopback IPv4 ranges and exact addresses are allowed.');
     }
   }
 

@@ -191,7 +191,7 @@ function validateStartupConfig() {
     }
     const unsafe = IP_ALLOWLIST.find((entry) => !isSafeAllowlistEntry(entry));
     if (unsafe) {
-      throw new Error(`Unsafe allowlist entry in LAN mode: ${unsafe}`);
+      throw new Error('Unsupported or unsafe allowlist entry in LAN mode. Only private/loopback IPv4 ranges and exact addresses are allowed.');
     }
     if (TRUST_PROXY) {
       throw new Error('JOBLIO_ALLOW_LAN=1 requires JOBLIO_TRUST_PROXY=0 unless explicitly redesigned for a trusted proxy.');
