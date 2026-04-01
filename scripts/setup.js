@@ -162,7 +162,9 @@ async function ensureAllowlistFile(pathRaw, context = {}) {
   }
   const content = `${lines.join('\n')}\n`;
   await fsp.writeFile(resolvedPath, content, { mode: 0o600 });
-  await fsp.chmod(resolvedPath, 0o600).catch(() => {});
+  await fsp.chmod(resolvedPath, 0o600).catch(() => {
+    console.warn('Warning: could not set permissions on allowlist file. Verify it is not world-readable.');
+  });
 }
 
 async function writeAllowlistFile(pathRaw, entries) {
@@ -173,7 +175,9 @@ async function writeAllowlistFile(pathRaw, entries) {
   await fsp.mkdir(parent, { recursive: true, mode: 0o700 });
   const content = `${entries.map((v) => sanitizeValue(v).trim()).filter(Boolean).join('\n')}\n`;
   await fsp.writeFile(resolvedPath, content, { mode: 0o600 });
-  await fsp.chmod(resolvedPath, 0o600).catch(() => {});
+  await fsp.chmod(resolvedPath, 0o600).catch(() => {
+    console.warn('Warning: could not set permissions on allowlist file. Verify it is not world-readable.');
+  });
 }
 
 async function askInteractive(existing, options = {}) {
