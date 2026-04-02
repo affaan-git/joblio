@@ -547,6 +547,7 @@ export function initJoblio() {
     let persistTimer = null;
     let persistInFlight = false;
     let persistQueued = false;
+    let persistDirty = false;
     let lastBackendSaveAt = "";
 
     function setBackendHealth(status, text) {
@@ -706,9 +707,11 @@ export function initJoblio() {
       })
         .then(() => {
           lastBackendSaveAt = nowIso();
+          persistDirty = false;
           setBackendHealth("connected", "Online");
         })
         .catch(() => {
+          persistDirty = true;
           setBackendHealth("disconnected", "Offline");
           showBackendSaveErrorToast();
         })
@@ -783,6 +786,9 @@ export function initJoblio() {
         serverNowIso = String(health?.at || serverNowIso);
         if (!persistInFlight) {
           setBackendHealth("connected", "Online");
+        }
+        if (persistDirty) {
+          persistNow();
         }
       } catch {
         setBackendHealth("disconnected", "Offline");
@@ -1699,8 +1705,12 @@ export function initJoblio() {
     });
 
     retryBackendBtn.addEventListener("click", async () => {
-      await hydrate();
-      render();
+      if (persistDirty) {
+        persistNow();
+      } else {
+        await hydrate();
+        render();
+      }
       pingBackendHealth();
     });
 
