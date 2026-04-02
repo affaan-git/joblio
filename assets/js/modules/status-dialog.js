@@ -1,6 +1,5 @@
 export function createStatusDialogHandlers(deps) {
   const {
-    state,
     SAFE_ID_RE,
     statusDialog,
     statusTabUpdate,
@@ -19,6 +18,8 @@ export function createStatusDialogHandlers(deps) {
     persist,
     render,
     showToast,
+    showOnlineToast,
+    findApp,
   } = deps;
 
   let statusDialogAppId = null;
@@ -85,7 +86,7 @@ export function createStatusDialogHandlers(deps) {
     persist();
     renderStatusHistory(app);
     render();
-    showToast("Timestamp updated.", "success");
+    showOnlineToast("Timestamp updated.");
   }
 
   statusHistoryList.addEventListener('click', (e) => {
@@ -95,7 +96,7 @@ export function createStatusDialogHandlers(deps) {
     const itemEl = actionEl.closest('.status-history-item');
     if (!itemEl) return;
     const index = Number(itemEl.dataset.index);
-    const app = state.apps.find((a) => a.id === statusDialogAppId);
+    const app = findApp(statusDialogAppId);
     if (!app || !Number.isFinite(index) || !app.statusHistory[index]) return;
 
     if (action === 'edit') {
@@ -121,7 +122,7 @@ export function createStatusDialogHandlers(deps) {
   function openStatusDialog(appId, view = 'update') {
     if (!SAFE_ID_RE.test(String(appId || ''))) return;
     statusDialogAppId = appId;
-    const app = state.apps.find((a) => a.id === appId);
+    const app = findApp(appId);
     if (app) renderStatusHistory(app);
     setStatusDialogView(view);
     statusDialog.classList.add('open');

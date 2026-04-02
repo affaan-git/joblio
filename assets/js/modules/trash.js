@@ -11,6 +11,7 @@ export function createTrashHandlers(deps) {
     persist,
     render,
     showToast,
+    showOnlineToast,
     requestJSON,
     applyServerState,
     filteredApps,
@@ -28,7 +29,7 @@ export function createTrashHandlers(deps) {
     }
     persist();
     render();
-    showToast('Application moved to trash.', 'warn');
+    showOnlineToast('Application moved to trash.', 'warn');
   }
 
   function restoreAppFromTrash(appId) {
@@ -43,7 +44,7 @@ export function createTrashHandlers(deps) {
     persist();
     render();
     renderTrashDialog();
-    showToast('Application restored.', 'success');
+    showOnlineToast('Application restored.');
   }
 
   async function purgeAppFromTrash(appId) {
@@ -63,7 +64,7 @@ export function createTrashHandlers(deps) {
     state.trashApps.splice(idx, 1);
     persist();
     renderTrashDialog();
-    showToast('Permanently deleted.', 'warn');
+    showOnlineToast('Permanently deleted.', 'warn');
   }
 
   async function restoreFileFromTrash(fileId) {

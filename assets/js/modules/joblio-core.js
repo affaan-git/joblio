@@ -107,8 +107,6 @@ export function initJoblio() {
       toastWrap,
     } = getDomRefs();
 
-    let saveToastTimer = null;
-    let lastSavedToastAt = 0;
     let lastBackendSaveErrorToastAt = 0;
     let csrfToken = "";
     let sessionReady = false;
@@ -315,15 +313,7 @@ export function initJoblio() {
       });
       const merged = { ...base, ...app };
       merged.id = normalizeAppId(merged.id);
-      merged.status = normalizeStatusId(merged.status);
-      merged.statusHistory = Array.isArray(merged.statusHistory)
-        ? merged.statusHistory
-          .map((entry) => ({
-            status: normalizeStatusId(entry?.status),
-            at: String(entry?.at || ""),
-          }))
-          .slice(0, 200)
-        : [];
+      normalizeStatusHistory(merged);
       merged.workspaceFiles = Array.isArray(merged.workspaceFiles)
         ? merged.workspaceFiles
           .map((f) => {
@@ -388,14 +378,8 @@ export function initJoblio() {
       }, 3000);
     }
 
-    function scheduleSavedToast() {
-      if (saveToastTimer) clearTimeout(saveToastTimer);
-      saveToastTimer = setTimeout(() => {
-        const now = Date.now();
-        if (now - lastSavedToastAt < 2000) return;
-        showToast("Saved.", "saved");
-        lastSavedToastAt = now;
-      }, 700);
+    function showOnlineToast(message, type = "success") {
+      if (!backendHealth.classList.contains("disconnected")) showToast(message, type);
     }
 
     function showBackendSaveErrorToast() {
@@ -709,7 +693,6 @@ export function initJoblio() {
           lastBackendSaveAt = nowIso();
           persistDirty = false;
           setBackendHealth("connected", "Online");
-          scheduleSavedToast();
         })
         .catch(() => {
           persistDirty = true;
@@ -816,6 +799,10 @@ export function initJoblio() {
       }
     }
 
+    function findApp(id) {
+      return state.apps.find((a) => a.id === id);
+    }
+
     const {
       openSearchPopover,
       closeSearchPopover,
@@ -859,6 +846,7 @@ export function initJoblio() {
       persist: () => persist(),
       render: () => render(),
       showToast,
+      showOnlineToast,
       requestJSON,
       applyServerState,
       filteredApps,
@@ -871,7 +859,6 @@ export function initJoblio() {
       closeStatusDialog,
       getStatusDialogAppId,
     } = createStatusDialogHandlers({
-      state,
       SAFE_ID_RE,
       statusDialog,
       statusTabUpdate,
@@ -890,6 +877,8 @@ export function initJoblio() {
       persist: () => persist(),
       render: () => render(),
       showToast,
+      showOnlineToast,
+      findApp,
     });
 
     function renderList() {
@@ -968,7 +957,7 @@ export function initJoblio() {
       app.statusHistory.unshift({ status: next, at: t });
       persist();
       render();
-      showToast(`Status updated to ${getStatusLabel(next)}.`, "success");
+      showOnlineToast(`Status updated to ${getStatusLabel(next)}.`);
     }
 
     function ensureAppWorkspace(app) {
@@ -1027,7 +1016,7 @@ export function initJoblio() {
     }
 
     function renderDetail() {
-      const app = state.apps.find((a) => a.id === state.activeId);
+      const app = findApp(state.activeId);
       if (!app) {
         detailEl.innerHTML = `<div class=\"detail-empty\">No application selected. Click + New to start tracking.</div>`;
         return;
@@ -1363,7 +1352,7 @@ export function initJoblio() {
       persist();
       closeNewDialog();
       render();
-      showToast("Application created.", "success");
+      showOnlineToast("Application created.");
     }
 
     function exportTrackerData() {
@@ -1399,26 +1388,15 @@ export function initJoblio() {
         showToast("Invalid JSON file.", "error");
         return;
       }
-      const apps = Array.isArray(parsed?.apps) ? parsed.apps : Array.isArray(parsed) ? parsed : null;
-      if (!apps) {
+      const imported = Array.isArray(parsed) ? { apps: parsed } : parsed;
+      if (!Array.isArray(imported?.apps) || !imported.apps.length) {
         showToast("No applications found in import.", "error");
         return;
       }
-      state.apps = apps.map(sanitizeClientApp);
-      state.trashApps = Array.isArray(parsed?.trashApps) ? parsed.trashApps.map(sanitizeClientApp) : [];
-      state.trashFiles = Array.isArray(parsed?.trashFiles) ? parsed.trashFiles.map(sanitizeClientTrashFile).filter(Boolean) : [];
-      state.activeId = state.apps[0]?.id || null;
-      if (parsed?.theme === "light" || parsed?.theme === "dark") {
-        state.theme = parsed.theme;
-        document.body.classList.toggle("theme-light", state.theme === "light");
-        syncThemeLabel();
-      }
-      if (VALID_SORT_VALUES.has(parsed?.sortBy)) state.sortBy = parsed.sortBy;
-      if (parsed?.statusFilter === "all" || STATUS_IDS.has(parsed?.statusFilter)) state.statusFilter = parsed.statusFilter;
-      if (parsed?.modeFilter === "all" || MODES.includes(parsed?.modeFilter)) state.modeFilter = parsed.modeFilter;
+      applyServerState(imported);
       persist();
       render();
-      showToast("Tracker imported.", "success");
+      showOnlineToast("Tracker imported.");
     }
 
     function setupColumnResizer() {
@@ -1436,7 +1414,7 @@ export function initJoblio() {
       if (deleteBtn) {
         e.stopPropagation();
         const appId = deleteBtn.dataset.id;
-        const app = state.apps.find((a) => a.id === appId);
+        const app = findApp(appId);
         if (!app) return;
         if (!window.confirm(`Move "${app.title}" at "${app.company}" to trash?`)) return;
         moveAppToTrash(appId);
@@ -1505,47 +1483,21 @@ export function initJoblio() {
       }
     });
 
-    sortSelect.addEventListener("change", (e) => {
-      state.sortBy = e.target.value;
-      persist();
-      render();
-    });
-
-    statusFilter.addEventListener("change", (e) => {
-      state.statusFilter = e.target.value;
-      filtersMenu.classList.remove("open");
-      persist();
-      render();
-    });
-
-    modeFilter.addEventListener("change", (e) => {
-      state.modeFilter = e.target.value;
-      filtersMenu.classList.remove("open");
-      persist();
-      render();
-    });
-
-    if (mobileSortInline) {
-      mobileSortInline.addEventListener("change", (e) => {
-        state.sortBy = e.target.value;
+    function onFilterChange(key, closeMenu) {
+      return (e) => {
+        state[key] = e.target.value;
+        if (closeMenu) filtersMenu.classList.remove("open");
         persist();
         render();
-      });
+      };
     }
-    if (mobileStatusInline) {
-      mobileStatusInline.addEventListener("change", (e) => {
-        state.statusFilter = e.target.value;
-        persist();
-        render();
-      });
-    }
-    if (mobileModeInline) {
-      mobileModeInline.addEventListener("change", (e) => {
-        state.modeFilter = e.target.value;
-        persist();
-        render();
-      });
-    }
+
+    sortSelect.addEventListener("change", onFilterChange("sortBy"));
+    statusFilter.addEventListener("change", onFilterChange("statusFilter", true));
+    modeFilter.addEventListener("change", onFilterChange("modeFilter", true));
+    if (mobileSortInline) mobileSortInline.addEventListener("change", onFilterChange("sortBy"));
+    if (mobileStatusInline) mobileStatusInline.addEventListener("change", onFilterChange("statusFilter"));
+    if (mobileModeInline) mobileModeInline.addEventListener("change", onFilterChange("modeFilter"));
 
     const toggleTheme = () => {
       state.theme = state.theme === "light" ? "dark" : "light";
@@ -1589,7 +1541,7 @@ export function initJoblio() {
       filtersMenu.classList.remove("open");
       persist();
       render();
-      showToast("Filters reset.");
+      showOnlineToast("Filters reset.");
     });
 
     exportBtn.addEventListener("click", () => {
@@ -1752,13 +1704,13 @@ export function initJoblio() {
 
     statusTabUpdate.addEventListener("click", () => setStatusDialogView("update"));
     statusTabHistory.addEventListener("click", () => {
-      const app = state.apps.find((a) => a.id === getStatusDialogAppId());
+      const app = findApp(getStatusDialogAppId());
       if (app) renderStatusHistory(app);
       setStatusDialogView("history");
     });
 
     clearStatusHistoryBtn.addEventListener("click", () => {
-      const app = state.apps.find((a) => a.id === getStatusDialogAppId());
+      const app = findApp(getStatusDialogAppId());
       if (!app) return;
       const ok = window.confirm("Clear this application's status history?");
       if (!ok) return;
@@ -1768,7 +1720,7 @@ export function initJoblio() {
       persist();
       renderStatusHistory(app);
       renderList();
-      showToast("Status history cleared.", "warn");
+      showOnlineToast("Status history cleared.", "warn");
     });
 
     statusDialog.addEventListener("click", (e) => {
@@ -1784,7 +1736,7 @@ export function initJoblio() {
         return;
       }
       if (!STATUS_IDS.has(action)) return;
-      const app = state.apps.find((a) => a.id === getStatusDialogAppId());
+      const app = findApp(getStatusDialogAppId());
       if (!app) {
         closeStatusDialog();
         return;
