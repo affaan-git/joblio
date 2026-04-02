@@ -67,6 +67,8 @@ const SERVER_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UT
 const SAFE_ID_RE = /^[a-zA-Z0-9_-]{6,100}$/;
 const ALLOWED_STATUS = new Set(['wishlist', 'in_progress', 'applied', 'interview', 'offer', 'rejected', 'closed']);
 const ALLOWED_THEME = new Set(['dark', 'light']);
+const ALLOWED_SORT = new Set(['newest_first', 'oldest_first', 'last_modified', 'company_asc', 'company_desc', 'title_asc', 'title_desc']);
+const ALLOWED_MODE = new Set(['Unknown', 'On-site', 'Hybrid', 'Remote']);
 const STORAGE_DIR_ABS = path.resolve(STORAGE_DIR);
 const TRASH_STORAGE_DIR_ABS = path.resolve(TRASH_STORAGE_DIR);
 const LOG_PATH = path.join(LOG_DIR, 'activity.log');
@@ -93,6 +95,9 @@ const DEFAULT_STATE = {
   apps: [],
   trashApps: [],
   trashFiles: [],
+  sortBy: 'newest_first',
+  statusFilter: 'all',
+  modeFilter: 'all',
   updatedAt: new Date().toISOString(),
 };
 
@@ -492,6 +497,9 @@ function sanitizeState(input) {
     apps: Array.isArray(base.apps) ? base.apps : [],
     trashApps: Array.isArray(base.trashApps) ? base.trashApps : [],
     trashFiles: Array.isArray(base.trashFiles) ? base.trashFiles : [],
+    sortBy: ALLOWED_SORT.has(base.sortBy) ? base.sortBy : 'newest_first',
+    statusFilter: base.statusFilter === 'all' || ALLOWED_STATUS.has(base.statusFilter) ? base.statusFilter : 'all',
+    modeFilter: base.modeFilter === 'all' || ALLOWED_MODE.has(base.modeFilter) ? base.modeFilter : 'all',
     updatedAt: typeof base.updatedAt === 'string' ? base.updatedAt : new Date().toISOString(),
   };
   out.apps = out.apps.map(sanitizeApp).filter(Boolean);
@@ -1203,6 +1211,9 @@ async function handleApi(req, res, url) {
         apps: Array.isArray(body.state.apps) ? body.state.apps : current.apps,
         trashApps: Array.isArray(body.state.trashApps) ? body.state.trashApps : current.trashApps,
         trashFiles: Array.isArray(body.state.trashFiles) ? body.state.trashFiles : current.trashFiles,
+        sortBy: body.state.sortBy,
+        statusFilter: body.state.statusFilter,
+        modeFilter: body.state.modeFilter,
       });
       if (incoming.apps.length > MAX_APPS || incoming.trashApps.length > MAX_APPS) {
         throw new Error(`Too many applications (limit ${MAX_APPS})`);
@@ -1420,6 +1431,9 @@ async function handleApi(req, res, url) {
       apps: Array.isArray(body.apps) ? body.apps : [],
       trashApps: Array.isArray(body.trashApps) ? body.trashApps : [],
       trashFiles: Array.isArray(body.trashFiles) ? body.trashFiles : [],
+      sortBy: body.sortBy,
+      statusFilter: body.statusFilter,
+      modeFilter: body.modeFilter,
     });
     if (imported.apps.length > MAX_APPS || imported.trashApps.length > MAX_APPS) {
       return json(res, 400, { error: `Import too large (max ${MAX_APPS} apps per section)` });

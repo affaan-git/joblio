@@ -547,6 +547,7 @@ export function initJoblio() {
     let persistTimer = null;
     let persistInFlight = false;
     let persistQueued = false;
+    let persistDirty = false;
     let lastBackendSaveAt = "";
 
     function setBackendHealth(status, text) {
@@ -665,8 +666,13 @@ export function initJoblio() {
         trashFiles: state.trashFiles,
         activeId: state.activeId,
         theme: state.theme,
+        sortBy: state.sortBy,
+        statusFilter: state.statusFilter,
+        modeFilter: state.modeFilter,
       };
     }
+
+    const VALID_SORT_VALUES = new Set(["newest_first", "oldest_first", "last_modified", "company_asc", "company_desc", "title_asc", "title_desc"]);
 
     function applyServerState(nextState) {
       state.apps = Array.isArray(nextState?.apps) ? nextState.apps.map(sanitizeClientApp) : [];
@@ -674,6 +680,9 @@ export function initJoblio() {
       state.trashFiles = Array.isArray(nextState?.trashFiles) ? nextState.trashFiles.map(sanitizeClientTrashFile).filter(Boolean) : [];
       state.activeId = SAFE_ID_RE.test(String(nextState?.activeId || "")) ? String(nextState.activeId) : (state.apps[0]?.id || null);
       state.theme = nextState?.theme === "light" ? "light" : "dark";
+      state.sortBy = VALID_SORT_VALUES.has(nextState?.sortBy) ? nextState.sortBy : "newest_first";
+      state.statusFilter = nextState?.statusFilter && (nextState.statusFilter === "all" || STATUS_IDS.has(nextState.statusFilter)) ? nextState.statusFilter : "all";
+      state.modeFilter = nextState?.modeFilter && (nextState.modeFilter === "all" || MODES.includes(nextState.modeFilter)) ? nextState.modeFilter : "all";
       if (state.activeId && !state.apps.some((a) => a.id === state.activeId)) {
         state.activeId = state.apps[0]?.id || null;
       }
@@ -698,9 +707,12 @@ export function initJoblio() {
       })
         .then(() => {
           lastBackendSaveAt = nowIso();
+          persistDirty = false;
           setBackendHealth("connected", "Online");
+          scheduleSavedToast();
         })
         .catch(() => {
+          persistDirty = true;
           setBackendHealth("disconnected", "Offline");
           showBackendSaveErrorToast();
         })
@@ -743,6 +755,9 @@ export function initJoblio() {
         state.trashFiles = [];
         state.activeId = null;
         state.theme = "dark";
+        state.sortBy = "newest_first";
+        state.statusFilter = "all";
+        state.modeFilter = "all";
         document.body.classList.toggle("theme-light", false);
         syncThemeLabel();
         setResumeTemplateButtonState(false, "No resume templates configured");
@@ -772,6 +787,9 @@ export function initJoblio() {
         serverNowIso = String(health?.at || serverNowIso);
         if (!persistInFlight) {
           setBackendHealth("connected", "Online");
+        }
+        if (persistDirty) {
+          persistNow();
         }
       } catch {
         setBackendHealth("disconnected", "Offline");
@@ -913,39 +931,6 @@ export function initJoblio() {
         })
         .join("");
 
-      listEl.querySelectorAll(".card").forEach((card) => {
-        card.addEventListener("click", () => {
-          state.activeId = card.dataset.id;
-          if (isMobileLayout()) {
-            goToMobileDetailAnimated();
-          }
-          persist();
-          render();
-        });
-      });
-
-      listEl.querySelectorAll(".card-status-btn").forEach((btn) => {
-        btn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          const appId = btn.dataset.id;
-          state.activeId = appId;
-          persist();
-          openStatusDialog(appId, "update");
-        });
-      });
-
-      listEl.querySelectorAll(".card-delete-btn").forEach((btn) => {
-        btn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          const appId = btn.dataset.id;
-          const app = state.apps.find((a) => a.id === appId);
-          if (!app) return;
-          const confirmed = window.confirm(`Move "${app.title}" at "${app.company}" to trash?`);
-          if (!confirmed) return;
-          moveAppToTrash(appId);
-        });
-      });
-
       if (state.scrollListToActive && state.activeId) {
         state.scrollListToActive = false;
         requestAnimationFrame(() => {
@@ -962,7 +947,6 @@ export function initJoblio() {
       app.updatedAt = nowIso();
       persist();
       renderList();
-      scheduleSavedToast();
     }
 
     function setStatus(app, nextStatus, options = {}) {
@@ -1193,7 +1177,6 @@ export function initJoblio() {
             }
             render();
             renderTrashDialog();
-            scheduleSavedToast();
           });
         });
 
@@ -1230,7 +1213,6 @@ export function initJoblio() {
         app.updatedAt = nowIso();
         persist();
         renderWorkspaceFiles();
-        scheduleSavedToast();
       }
 
       renderWorkspaceFiles();
@@ -1288,7 +1270,6 @@ export function initJoblio() {
         app.descriptionText = descriptionInput.value;
         app.updatedAt = nowIso();
         persist();
-        scheduleSavedToast();
       });
 
       document.getElementById("deleteAppBtn").addEventListener("click", () => {
@@ -1394,6 +1375,9 @@ export function initJoblio() {
         apps: state.apps,
         trashApps: state.trashApps,
         trashFiles: state.trashFiles,
+        sortBy: state.sortBy,
+        statusFilter: state.statusFilter,
+        modeFilter: state.modeFilter,
       };
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -1429,6 +1413,9 @@ export function initJoblio() {
         document.body.classList.toggle("theme-light", state.theme === "light");
         syncThemeLabel();
       }
+      if (VALID_SORT_VALUES.has(parsed?.sortBy)) state.sortBy = parsed.sortBy;
+      if (parsed?.statusFilter === "all" || STATUS_IDS.has(parsed?.statusFilter)) state.statusFilter = parsed.statusFilter;
+      if (parsed?.modeFilter === "all" || MODES.includes(parsed?.modeFilter)) state.modeFilter = parsed.modeFilter;
       persist();
       render();
       showToast("Tracker imported.", "success");
@@ -1443,6 +1430,35 @@ export function initJoblio() {
         setLeftPanelWidth(clamped);
         localStorage.setItem(LEFT_WIDTH_KEY, String(clamped));
       }
+
+    listEl.addEventListener("click", (e) => {
+      const deleteBtn = e.target.closest(".card-delete-btn");
+      if (deleteBtn) {
+        e.stopPropagation();
+        const appId = deleteBtn.dataset.id;
+        const app = state.apps.find((a) => a.id === appId);
+        if (!app) return;
+        if (!window.confirm(`Move "${app.title}" at "${app.company}" to trash?`)) return;
+        moveAppToTrash(appId);
+        return;
+      }
+      const statusBtn = e.target.closest(".card-status-btn");
+      if (statusBtn) {
+        e.stopPropagation();
+        const appId = statusBtn.dataset.id;
+        state.activeId = appId;
+        persist();
+        openStatusDialog(appId, "update");
+        return;
+      }
+      const card = e.target.closest(".card");
+      if (card) {
+        state.activeId = card.dataset.id;
+        if (isMobileLayout()) goToMobileDetailAnimated();
+        persist();
+        render();
+      }
+    });
 
       colResizer.addEventListener("dblclick", () => {
         setLeftPanelWidth(LEFT_PANEL_DEFAULT);
@@ -1491,36 +1507,42 @@ export function initJoblio() {
 
     sortSelect.addEventListener("change", (e) => {
       state.sortBy = e.target.value;
+      persist();
       render();
     });
 
     statusFilter.addEventListener("change", (e) => {
       state.statusFilter = e.target.value;
       filtersMenu.classList.remove("open");
+      persist();
       render();
     });
 
     modeFilter.addEventListener("change", (e) => {
       state.modeFilter = e.target.value;
       filtersMenu.classList.remove("open");
+      persist();
       render();
     });
 
     if (mobileSortInline) {
       mobileSortInline.addEventListener("change", (e) => {
         state.sortBy = e.target.value;
+        persist();
         render();
       });
     }
     if (mobileStatusInline) {
       mobileStatusInline.addEventListener("change", (e) => {
         state.statusFilter = e.target.value;
+        persist();
         render();
       });
     }
     if (mobileModeInline) {
       mobileModeInline.addEventListener("change", (e) => {
         state.modeFilter = e.target.value;
+        persist();
         render();
       });
     }
@@ -1565,6 +1587,7 @@ export function initJoblio() {
       state.statusFilter = "all";
       state.modeFilter = "all";
       filtersMenu.classList.remove("open");
+      persist();
       render();
       showToast("Filters reset.");
     });
@@ -1679,8 +1702,12 @@ export function initJoblio() {
     });
 
     retryBackendBtn.addEventListener("click", async () => {
-      await hydrate();
-      render();
+      if (persistDirty) {
+        persistNow();
+      } else {
+        await hydrate();
+        render();
+      }
       pingBackendHealth();
     });
 

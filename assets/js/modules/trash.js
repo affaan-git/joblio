@@ -132,12 +132,6 @@ export function createTrashHandlers(deps) {
         .join('');
     }
 
-    trashAppsList.querySelectorAll('[data-trash-restore]').forEach((btn) => {
-      btn.addEventListener('click', () => restoreAppFromTrash(btn.dataset.trashRestore));
-    });
-    trashAppsList.querySelectorAll('[data-trash-purge]').forEach((btn) => {
-      btn.addEventListener('click', () => purgeAppFromTrash(btn.dataset.trashPurge));
-    });
 
     if (!state.trashFiles.length) {
       trashFilesList.innerHTML = '<div class="small">No deleted files.</div>';
@@ -159,13 +153,21 @@ export function createTrashHandlers(deps) {
         .join('');
     }
 
-    trashFilesList.querySelectorAll('[data-trash-file-restore]').forEach((btn) => {
-      btn.addEventListener('click', () => restoreFileFromTrash(btn.dataset.trashFileRestore));
-    });
-    trashFilesList.querySelectorAll('[data-trash-file-purge]').forEach((btn) => {
-      btn.addEventListener('click', () => purgeFileFromTrash(btn.dataset.trashFilePurge, btn.dataset.trashFileName || ''));
-    });
   }
+
+  trashAppsList.addEventListener('click', (e) => {
+    const restore = e.target.closest('[data-trash-restore]');
+    if (restore) { restoreAppFromTrash(restore.dataset.trashRestore); return; }
+    const purge = e.target.closest('[data-trash-purge]');
+    if (purge) { purgeAppFromTrash(purge.dataset.trashPurge); }
+  });
+
+  trashFilesList.addEventListener('click', (e) => {
+    const restore = e.target.closest('[data-trash-file-restore]');
+    if (restore) { restoreFileFromTrash(restore.dataset.trashFileRestore); return; }
+    const purge = e.target.closest('[data-trash-file-purge]');
+    if (purge) { purgeFileFromTrash(purge.dataset.trashFilePurge, purge.dataset.trashFileName || ''); }
+  });
 
   return {
     moveAppToTrash,
