@@ -6,7 +6,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const root = path.resolve(__dirname, '..');
-const dataDir = path.resolve(process.env.JOBLIO_DATA_DIR || path.join(root, '.joblio-data'));
+const dataDir = path.join(root, '.joblio-data');
 const outDir = path.join(dataDir, 'tls');
 const certPath = path.join(outDir, 'localhost-cert.pem');
 const keyPath = path.join(outDir, 'localhost-key.pem');

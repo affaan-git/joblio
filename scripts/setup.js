@@ -9,7 +9,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const prompts = require('prompts');
 const { createPasswordHash } = require('../lib/auth');
-const { parseEnvText } = require('../lib/env-file');
+const { parseEnvText, cleanEnv } = require('../lib/env-file');
 const { isLoopbackHost, isPrivateOrLoopbackHost, isWildcardHost } = require('../lib/network-policy');
 const { parseAllowlist, isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('../lib/ip-allowlist');
 const { loadAllowlistFromEnvSync } = require('../lib/allowlist-source');
@@ -422,33 +422,8 @@ async function writeConfig(result) {
   await enforcePerms(configPath, 0o600, 'config');
 }
 
-function buildConfigEnv(result) {
-  return {
-    ...process.env,
-    JOBLIO_ALLOW_LAN: sanitizeValue(result.allowLan),
-    HOST: sanitizeValue(result.host),
-    PORT: sanitizeValue(result.port),
-    JOBLIO_API_TOKEN: sanitizeValue(result.apiToken),
-    JOBLIO_BASIC_AUTH_USER: sanitizeValue(result.user),
-    JOBLIO_BASIC_AUTH_HASH: sanitizeValue(result.passwordHash),
-    JOBLIO_AUDIT_KEY: sanitizeValue(result.auditKey),
-    JOBLIO_TLS_CERT_PATH: sanitizeValue(result.certPath),
-    JOBLIO_TLS_KEY_PATH: sanitizeValue(result.keyPath),
-    JOBLIO_DATA_DIR: sanitizeValue(result.runtimeDataDir),
-    JOBLIO_BACKUP_DIR: sanitizeValue(result.backupDir),
-    JOBLIO_COOKIE_SECURE: '1',
-    RATE_MAX_AUTH_SESSION: sanitizeValue(result.rateMaxAuthSession),
-    AUTH_FAIL_WINDOW_MS: sanitizeValue(result.authFailWindowMs),
-    AUTH_FAIL_THRESHOLD: sanitizeValue(result.authFailThreshold),
-    AUTH_LOCKOUT_MS: sanitizeValue(result.authLockoutMs),
-    AUTH_BACKOFF_BASE_MS: sanitizeValue(result.authBackoffBaseMs),
-    AUTH_BACKOFF_MAX_MS: sanitizeValue(result.authBackoffMaxMs),
-    AUTH_BACKOFF_START_AFTER: sanitizeValue(result.authBackoffStartAfter),
-    AUTH_GUARD_MAX_ENTRIES: sanitizeValue(result.authGuardMaxEntries),
-    JOBLIO_TRUST_PROXY: sanitizeValue(result.trustProxy),
-    JOBLIO_IP_ALLOWLIST_PATH: sanitizeValue(result.ipAllowlistPath),
-    JOBLIO_RESUME_TEMPLATES: sanitizeValue(result.resumeTemplates),
-  };
+function buildChildEnv() {
+  return cleanEnv(process.env);
 }
 
 function runValidationStep(name, args, env) {
@@ -461,8 +436,8 @@ function runValidationStep(name, args, env) {
   }
 }
 
-function runPostSetupValidation(result) {
-  const env = buildConfigEnv(result);
+function runPostSetupValidation() {
+  const env = buildChildEnv();
   runValidationStep('preflight', ['./scripts/preflight.js'], env);
   runValidationStep('security-check', ['./scripts/security-check.js'], env);
 }
@@ -481,7 +456,7 @@ async function main() {
   }
   await writeConfig(result);
   console.log('Running post-configuration validation...');
-  runPostSetupValidation(result);
+  runPostSetupValidation();
   console.log('Setup complete: configuration saved to .joblio-data/config.env');
 }
 

@@ -4,7 +4,7 @@
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
-const { readEnvFile } = require('../lib/env-file');
+const { readEnvFile, cleanEnv } = require('../lib/env-file');
 const { evaluatePreflight } = require('./preflight');
 
 const root = path.resolve(__dirname, '..');
@@ -16,9 +16,9 @@ async function loadConfigEnv() {
 }
 
 function applyLockedRuntimeEnv(configEnv) {
-  for (const k of Object.keys(configEnv)) {
-    process.env[k] = String(configEnv[k]);
-  }
+  const systemOnly = cleanEnv(process.env);
+  for (const k of Object.keys(process.env)) delete process.env[k];
+  Object.assign(process.env, systemOnly, configEnv);
 }
 
 async function main() {
@@ -32,10 +32,7 @@ async function main() {
   const runtimeDataDir = path.resolve(configEnv.JOBLIO_DATA_DIR || path.join(root, '.joblio-data'));
   await fsp.mkdir(runtimeDataDir, { recursive: true });
 
-  const preflight = evaluatePreflight({
-    ...process.env,
-    ...configEnv,
-  });
+  const preflight = evaluatePreflight(configEnv);
   if (preflight.issues.length) {
     console.error('Preflight failed:');
     preflight.issues.forEach((i) => console.error(`- ${i}`));
@@ -50,6 +47,7 @@ async function main() {
   console.log('Use your configured Basic Auth credentials to sign in.');
 
   applyLockedRuntimeEnv(configEnv);
+  process.env._JOBLIO_ENV_LOCKED = '1';
   // Start server in-process without spawning child commands.
   require(path.join(root, 'server.js'));
 }

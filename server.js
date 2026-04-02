@@ -13,6 +13,10 @@ const { validateTemplateConfig, DEFAULT_MAX_TEMPLATE_BYTES } = require('./lib/te
 const { loadAllowlistFromEnvSync } = require('./lib/allowlist-source');
 const { validateNetworkPolicy } = require('./lib/validate-network');
 
+if (process.env._JOBLIO_ENV_LOCKED !== '1') {
+  throw new Error('server.js must be started via start.js (npm start). Direct invocation is not supported.');
+}
+
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 8787);
 const JOBLIO_ALLOW_LAN = process.env.JOBLIO_ALLOW_LAN === '1';
@@ -60,6 +64,7 @@ const AUTH_GUARD_MAX_ENTRIES = Number(process.env.AUTH_GUARD_MAX_ENTRIES || 2000
 const ALLOWLIST_SOURCE = loadAllowlistFromEnvSync(process.env, { baseDir: ROOT_DIR });
 const IP_ALLOWLIST = ALLOWLIST_SOURCE.entries;
 const TRUST_PROXY = process.env.JOBLIO_TRUST_PROXY === '1';
+const COOKIE_SECURE = process.env.JOBLIO_COOKIE_SECURE === '1';
 const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 8 * 60 * 60 * 1000);
 const SESSION_ABS_TTL_MS = Number(process.env.SESSION_ABS_TTL_MS || 24 * 60 * 60 * 1000);
 const SESSION_COOKIE_NAME = 'joblio_sid';
@@ -819,7 +824,7 @@ function makeSetCookie(value, maxAgeSec) {
 }
 
 function reqIsTlsExpected() {
-  return process.env.JOBLIO_COOKIE_SECURE === '1' || transportIsTls;
+  return COOKIE_SECURE || transportIsTls;
 }
 
 async function createSessionRecord(req) {
