@@ -276,7 +276,7 @@ export function initJoblio() {
       mobileSortInline.value = state.sortBy;
       mobileStatusInline.value = state.statusFilter;
       mobileModeInline.value = state.modeFilter;
-      mobileSortInline.classList.toggle("is-active", state.sortBy !== "recent_update");
+      mobileSortInline.classList.toggle("is-active", state.sortBy !== "newest_first");
       mobileStatusInline.classList.toggle("is-active", state.statusFilter !== "all");
       mobileModeInline.classList.toggle("is-active", state.modeFilter !== "all");
     }
@@ -866,6 +866,12 @@ export function initJoblio() {
       getStatusLabel,
       escapeHtml,
       fmtDate,
+      ymdFromIsoInTimeZone,
+      hhmmFromIsoInTimeZone,
+      getServerTimeZone: () => serverTimeZone,
+      persist: () => persist(),
+      render: () => render(),
+      showToast,
     });
 
     function renderList() {
@@ -969,7 +975,7 @@ export function initJoblio() {
         if (!options.preserveAppliedDate && !app.appliedAt) {
           app.appliedAt = ymdFromIsoInTimeZone(t, serverTimeZone) || "";
         }
-        if (!app.appliedTime) {
+        if (!options.preserveAppliedDate && !app.appliedTime) {
           app.appliedTime = hhmmFromIsoInTimeZone(t, serverTimeZone) || nowTimeStr();
         }
       }

@@ -172,27 +172,34 @@ export function createSearchFilters(deps) {
       return terms.every((t) => hay.includes(t));
     });
     const sorted = [...base];
-    if (state.sortBy === 'company_asc') {
+    const latestStatusAt = (app) => (Array.isArray(app.statusHistory) && app.statusHistory.length ? app.statusHistory[0].at : app.statusUpdatedAt) || '';
+    if (state.sortBy === 'oldest_first') {
+      sorted.sort((a, b) => latestStatusAt(a).localeCompare(latestStatusAt(b)));
+    } else if (state.sortBy === 'last_modified') {
+      sorted.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+    } else if (state.sortBy === 'company_asc') {
       sorted.sort((a, b) => a.company.localeCompare(b.company));
     } else if (state.sortBy === 'company_desc') {
       sorted.sort((a, b) => b.company.localeCompare(a.company));
     } else if (state.sortBy === 'title_asc') {
       sorted.sort((a, b) => a.title.localeCompare(b.title));
-    } else if (state.sortBy === 'oldest_create') {
-      sorted.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+    } else if (state.sortBy === 'title_desc') {
+      sorted.sort((a, b) => b.title.localeCompare(a.title));
     } else {
-      sorted.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+      sorted.sort((a, b) => latestStatusAt(b).localeCompare(latestStatusAt(a)));
     }
     return sorted;
   }
 
   function renderFilters() {
     const sortOptions = [
-      { value: 'recent_update', label: 'Sort: Recently updated' },
-      { value: 'oldest_create', label: 'Sort: Oldest created' },
+      { value: 'newest_first', label: 'Sort: Newest' },
+      { value: 'oldest_first', label: 'Sort: Oldest' },
+      { value: 'last_modified', label: 'Sort: Last modified' },
       { value: 'company_asc', label: 'Sort: Company A-Z' },
       { value: 'company_desc', label: 'Sort: Company Z-A' },
       { value: 'title_asc', label: 'Sort: Title A-Z' },
+      { value: 'title_desc', label: 'Sort: Title Z-A' },
     ];
     sortSelect.innerHTML = sortOptions
       .map((opt) => `<option value="${opt.value}">${escapeHtml(opt.label)}</option>`)

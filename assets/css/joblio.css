@@ -973,6 +973,41 @@
       gap: 0.45rem;
     }
 
+    .sh-edit-btn {
+      padding: 0.2rem 0.4rem;
+      font-size: 0.72rem;
+      line-height: 1;
+      min-width: unset;
+      border-radius: 6px;
+      flex-shrink: 0;
+    }
+
+    .status-history-item.sh-editing {
+      flex-wrap: wrap;
+    }
+
+    .sh-edit-fields {
+      display: flex;
+      gap: 0.3rem;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .sh-edit-fields input {
+      font-size: 0.78rem;
+      padding: 0.28rem 0.36rem;
+    }
+
+    .sh-edit-actions {
+      display: flex;
+      gap: 0.3rem;
+    }
+
+    .sh-edit-actions .btn {
+      padding: 0.24rem 0.52rem;
+      font-size: 0.72rem;
+    }
+
     .dialog-btn {
       border: 1px solid var(--border);
       background: var(--bg-panel);
