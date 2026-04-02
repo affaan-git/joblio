@@ -193,13 +193,13 @@ export function createSearchFilters(deps) {
 
   function renderFilters() {
     const sortOptions = [
-      { value: 'newest_first', label: 'Newest' },
-      { value: 'oldest_first', label: 'Oldest' },
-      { value: 'last_modified', label: 'Last modified' },
-      { value: 'company_asc', label: 'Company A-Z' },
-      { value: 'company_desc', label: 'Company Z-A' },
-      { value: 'title_asc', label: 'Title A-Z' },
-      { value: 'title_desc', label: 'Title Z-A' },
+      { value: 'newest_first', label: 'Sort: Newest' },
+      { value: 'oldest_first', label: 'Sort: Oldest' },
+      { value: 'last_modified', label: 'Sort: Last modified' },
+      { value: 'company_asc', label: 'Sort: Company A-Z' },
+      { value: 'company_desc', label: 'Sort: Company Z-A' },
+      { value: 'title_asc', label: 'Sort: Title A-Z' },
+      { value: 'title_desc', label: 'Sort: Title Z-A' },
     ];
     sortSelect.innerHTML = sortOptions
       .map((opt) => `<option value="${opt.value}">${escapeHtml(opt.label)}</option>`)

@@ -866,6 +866,12 @@ export function initJoblio() {
       getStatusLabel,
       escapeHtml,
       fmtDate,
+      ymdFromIsoInTimeZone,
+      hhmmFromIsoInTimeZone,
+      getServerTimeZone: () => serverTimeZone,
+      persist: () => persist(),
+      render: () => render(),
+      showToast,
     });
 
     function renderList() {
@@ -969,7 +975,7 @@ export function initJoblio() {
         if (!options.preserveAppliedDate && !app.appliedAt) {
           app.appliedAt = ymdFromIsoInTimeZone(t, serverTimeZone) || "";
         }
-        if (!app.appliedTime) {
+        if (!options.preserveAppliedDate && !app.appliedTime) {
           app.appliedTime = hhmmFromIsoInTimeZone(t, serverTimeZone) || nowTimeStr();
         }
       }
