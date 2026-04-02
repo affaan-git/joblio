@@ -131,12 +131,6 @@ export function createSearchFilters(deps) {
     searchWrap.classList.toggle('has-tokens', hasTokenChips);
     searchParsed.innerHTML = chips.length ? chips.join('') : '';
 
-    searchTokenPresets.querySelectorAll('[data-token]').forEach((btn) => {
-      btn.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        appendSearchToken(btn.dataset.token);
-      });
-    });
   }
 
   function filteredApps() {
@@ -229,6 +223,13 @@ export function createSearchFilters(deps) {
     newMode.innerHTML = MODES.map((m) => `<option value="${m}">${m}</option>`).join('');
     newMode.value = 'Unknown';
   }
+
+  searchTokenPresets.addEventListener('mousedown', (e) => {
+    const btn = e.target.closest('[data-token]');
+    if (!btn) return;
+    e.preventDefault();
+    appendSearchToken(btn.dataset.token);
+  });
 
   return {
     parseSearchQuery,
