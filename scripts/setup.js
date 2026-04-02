@@ -14,6 +14,7 @@ const { isLoopbackHost, isPrivateOrLoopbackHost, isWildcardHost } = require('../
 const { parseAllowlist, isSafeAllowlistEntry, hasNonLoopbackAllowlistEntry } = require('../lib/ip-allowlist');
 const { loadAllowlistFromEnvSync } = require('../lib/allowlist-source');
 const { validateTemplateConfig, DEFAULT_MAX_TEMPLATE_BYTES } = require('../lib/template-registry');
+const { enforcePerms } = require('../lib/fs-perms');
 
 const root = path.resolve(__dirname, '..');
 const dataDir = path.join(root, '.joblio-data');
@@ -162,9 +163,7 @@ async function ensureAllowlistFile(pathRaw, context = {}) {
   }
   const content = `${lines.join('\n')}\n`;
   await fsp.writeFile(resolvedPath, content, { mode: 0o600 });
-  await fsp.chmod(resolvedPath, 0o600).catch(() => {
-    console.warn('Warning: could not set permissions on allowlist file. Verify it is not world-readable.');
-  });
+  await enforcePerms(resolvedPath, 0o600, 'allowlist');
 }
 
 async function writeAllowlistFile(pathRaw, entries) {
@@ -175,9 +174,7 @@ async function writeAllowlistFile(pathRaw, entries) {
   await fsp.mkdir(parent, { recursive: true, mode: 0o700 });
   const content = `${entries.map((v) => sanitizeValue(v).trim()).filter(Boolean).join('\n')}\n`;
   await fsp.writeFile(resolvedPath, content, { mode: 0o600 });
-  await fsp.chmod(resolvedPath, 0o600).catch(() => {
-    console.warn('Warning: could not set permissions on allowlist file. Verify it is not world-readable.');
-  });
+  await enforcePerms(resolvedPath, 0o600, 'allowlist');
 }
 
 async function askInteractive(existing, options = {}) {
@@ -422,7 +419,7 @@ async function writeConfig(result) {
   const tmp = `${configPath}.tmp`;
   await fsp.writeFile(tmp, lines.join('\n'), { mode: 0o600 });
   await fsp.rename(tmp, configPath);
-  await fsp.chmod(configPath, 0o600).catch(() => {});
+  await enforcePerms(configPath, 0o600, 'config');
 }
 
 function buildConfigEnv(result) {

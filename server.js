@@ -171,7 +171,10 @@ async function rotateLogIfNeeded() {
     } catch {}
     await fsp.rename(LOG_PATH, LOG_PREV_PATH);
     await writeAuditChain({ lastHash: chain.lastHash, entries: 0, lastAt: '' });
-  } catch {}
+  } catch {
+    // eslint-disable-next-line no-console
+    console.error('[server] Log rotation failed. Audit log may grow unchecked.');
+  }
 }
 
 function validateStartupConfig() {
@@ -248,11 +251,7 @@ function getConfiguredResumeTemplates() {
   return checked.templates;
 }
 
-async function applyPathPerms(targetPath, mode) {
-  try {
-    await fsp.chmod(targetPath, mode);
-  } catch {}
-}
+const { enforcePerms: applyPathPerms } = require('./lib/fs-perms');
 
 function computeAuditHash(prevHash, payload) {
   const base = `${prevHash}|${JSON.stringify(payload)}`;
@@ -448,7 +447,10 @@ async function snapshotCurrentState() {
     await fsp.copyFile(STATE_PATH, outPath);
     await applyPathPerms(outPath, 0o600);
     await pruneSnapshots();
-  } catch {}
+  } catch {
+    // eslint-disable-next-line no-console
+    console.error('[server] State snapshot failed. Data recovery may be limited.');
+  }
 }
 
 async function pruneSnapshots() {
@@ -459,7 +461,10 @@ async function pruneSnapshots() {
     if (files.length <= MAX_SNAPSHOTS) return;
     const toDelete = files.slice(0, files.length - MAX_SNAPSHOTS);
     await Promise.all(toDelete.map((f) => fsp.unlink(path.join(SNAPSHOT_DIR, f)).catch(() => {})));
-  } catch {}
+  } catch {
+    // eslint-disable-next-line no-console
+    console.error('[server] Snapshot pruning failed. Old snapshots may accumulate.');
+  }
 }
 
 async function recoverStateFromSnapshots() {
