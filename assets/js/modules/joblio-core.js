@@ -709,6 +709,7 @@ export function initJoblio() {
           lastBackendSaveAt = nowIso();
           persistDirty = false;
           setBackendHealth("connected", "Online");
+          scheduleSavedToast();
         })
         .catch(() => {
           persistDirty = true;
@@ -946,7 +947,6 @@ export function initJoblio() {
       app.updatedAt = nowIso();
       persist();
       renderList();
-      scheduleSavedToast();
     }
 
     function setStatus(app, nextStatus, options = {}) {
@@ -1177,7 +1177,6 @@ export function initJoblio() {
             }
             render();
             renderTrashDialog();
-            scheduleSavedToast();
           });
         });
 
@@ -1214,7 +1213,6 @@ export function initJoblio() {
         app.updatedAt = nowIso();
         persist();
         renderWorkspaceFiles();
-        scheduleSavedToast();
       }
 
       renderWorkspaceFiles();
@@ -1272,7 +1270,6 @@ export function initJoblio() {
         app.descriptionText = descriptionInput.value;
         app.updatedAt = nowIso();
         persist();
-        scheduleSavedToast();
       });
 
       document.getElementById("deleteAppBtn").addEventListener("click", () => {
