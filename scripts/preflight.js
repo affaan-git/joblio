@@ -3,13 +3,15 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { readEnvFileSync } = require('../lib/env-file');
 const { loadAllowlistFromEnvSync } = require('../lib/allowlist-source');
 const { validateNetworkPolicy } = require('../lib/validate-network');
 const { validateTemplateConfig, DEFAULT_MAX_TEMPLATE_BYTES } = require('../lib/template-registry');
 
 const root = path.resolve(__dirname, '..');
+const configPath = path.join(root, '.joblio-data', 'config.env');
 
-function evaluatePreflight(env = process.env) {
+function evaluatePreflight(env) {
   const host = env.HOST || '127.0.0.1';
   const allowLan = env.JOBLIO_ALLOW_LAN === '1';
   const token = env.JOBLIO_API_TOKEN || '';
@@ -75,7 +77,8 @@ function evaluatePreflight(env = process.env) {
 }
 
 function main() {
-  const { issues, warns } = evaluatePreflight(process.env);
+  const configEnv = readEnvFileSync(configPath);
+  const { issues, warns } = evaluatePreflight(configEnv);
   if (!issues.length) {
     console.log('Preflight OK');
     warns.forEach((w) => console.log(`WARN: ${w}`));
