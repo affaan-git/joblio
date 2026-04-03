@@ -828,7 +828,7 @@ function reqIsTlsExpected() {
 }
 
 async function createSessionRecord(req) {
-  const sid = crypto.randomUUID();
+  const sid = crypto.randomBytes(32).toString('hex');
   const now = Date.now();
   const createdAt = new Date(now).toISOString();
   const binding = sessionBindingMaterial(req);
