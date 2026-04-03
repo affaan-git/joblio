@@ -1015,14 +1015,17 @@ export function initJoblio() {
       });
     }
 
-    function renderDetail() {
-      const app = findApp(state.activeId);
-      if (!app) {
-        detailEl.innerHTML = `<div class=\"detail-empty\">No application selected. Click + New to start tracking.</div>`;
-        return;
-      }
-      ensureAppWorkspace(app);
+    let detailEls = null;
 
+    function getDetailApp() {
+      return findApp(state.activeId);
+    }
+
+    function updateIfNotFocused(el, value) {
+      if (document.activeElement !== el) el.value = value;
+    }
+
+    function buildDetailDom(app) {
       detailEl.innerHTML = `
         <div class="detail-grid">
           <section class="section area-core">
@@ -1105,170 +1108,62 @@ export function initJoblio() {
         </div>
       `;
 
-      const bindText = (id, key) => {
-        const el = document.getElementById(id);
-        el.addEventListener("input", () => updateField(app, key, el.value));
+      const els = {
+        fTitle: document.getElementById("fTitle"),
+        fCompany: document.getElementById("fCompany"),
+        fLocation: document.getElementById("fLocation"),
+        fJobUrl: document.getElementById("fJobUrl"),
+        fAppUrl: document.getElementById("fAppUrl"),
+        fMode: document.getElementById("fMode"),
+        noteInput: document.getElementById("noteInput"),
+        descriptionInput: document.getElementById("descriptionInput"),
+        coreStatusPill: document.getElementById("coreStatusPill"),
+        openStatusBtn: document.getElementById("openStatusBtn"),
+        deleteAppBtn: document.getElementById("deleteAppBtn"),
+        drop: document.getElementById("workspaceDrop"),
+        fileInput: document.getElementById("workspaceFileInput"),
+        filesEl: document.getElementById("workspaceFiles"),
+        mobileStatusBtn: document.getElementById("mobileDetailStatusBtn"),
+        mobileLinksBtn: document.getElementById("mobileDetailLinksBtn"),
+        mobileDeleteBtn: document.getElementById("mobileDetailDeleteBtn"),
       };
-      bindText("fCompany", "company");
-      bindText("fTitle", "title");
-      bindText("fLocation", "location");
-      bindText("fJobUrl", "jobUrl");
-      bindText("fAppUrl", "applicationUrl");
 
-      document.getElementById("fMode").addEventListener("change", (e) => updateField(app, "workMode", e.target.value));
+      const bindText = (el, key) => {
+        el.addEventListener("input", () => { const a = getDetailApp(); if (a) updateField(a, key, el.value); });
+      };
+      bindText(els.fCompany, "company");
+      bindText(els.fTitle, "title");
+      bindText(els.fLocation, "location");
+      bindText(els.fJobUrl, "jobUrl");
+      bindText(els.fAppUrl, "applicationUrl");
 
-      document.getElementById("openStatusBtn").addEventListener("click", () => openStatusDialog(app.id, "update"));
-      document.getElementById("coreStatusPill").addEventListener("click", () => openStatusDialog(app.id, "history"));
-      document.getElementById("noteInput").addEventListener("input", (e) => updateField(app, "note", e.target.value));
+      els.fMode.addEventListener("change", (e) => { const a = getDetailApp(); if (a) updateField(a, "workMode", e.target.value); });
+      els.openStatusBtn.addEventListener("click", () => { const a = getDetailApp(); if (a) openStatusDialog(a.id, "update"); });
+      els.coreStatusPill.addEventListener("click", () => { const a = getDetailApp(); if (a) openStatusDialog(a.id, "history"); });
+      els.noteInput.addEventListener("input", (e) => { const a = getDetailApp(); if (a) updateField(a, "note", e.target.value); });
 
-      const drop = document.getElementById("workspaceDrop");
-      const fileInput = document.getElementById("workspaceFileInput");
-      const filesEl = document.getElementById("workspaceFiles");
-
-      function renderWorkspaceFiles() {
-        if (!app.workspaceFiles.length) {
-          drop.classList.remove("has-files");
-          filesEl.innerHTML = "";
-          return;
-        }
-        drop.classList.add("has-files");
-        filesEl.innerHTML = app.workspaceFiles
-          .map((file, index) => `
-            <article class="file-tile" title="${escapeHtml(file.name)}" data-file-id="${escapeHtml(file.id || "")}">
-              <div class="file-tile-head">
-                <span class="file-type">${escapeHtml(getFileBadge(file))}</span>
-                <button class="file-remove-btn" type="button" data-file-index="${index}" aria-label="Remove ${escapeHtml(file.name)}">×</button>
-              </div>
-              <div class="file-name">${escapeHtml(file.name)}</div>
-              <div class="file-meta">${escapeHtml(formatFileSize(file.size))}</div>
-            </article>
-          `)
-          .join("");
-
-        filesEl.querySelectorAll(".file-remove-btn").forEach((btn) => {
-          btn.addEventListener("click", async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const idx = Number(btn.dataset.fileIndex);
-            if (!Number.isInteger(idx) || idx < 0 || idx >= app.workspaceFiles.length) return;
-            const fileName = app.workspaceFiles[idx]?.name || "this file";
-            const confirmed = window.confirm(`Remove "${fileName}" from workspace files?`);
-            if (!confirmed) return;
-            const fileId = app.workspaceFiles[idx]?.id;
-            if (fileId) {
-              try {
-                const result = await requestJSON(`/api/files/${encodeURIComponent(fileId)}`, { method: "DELETE" });
-                applyServerState(result.state || {});
-              } catch {
-                showToast(`Could not remove ${fileName}`, "error");
-                return;
-              }
-            }
-            render();
-            renderTrashDialog();
-          });
-        });
-
-        filesEl.querySelectorAll(".file-tile").forEach((tile) => {
-          tile.addEventListener("click", (e) => {
-            if (e.target.closest(".file-remove-btn")) return;
-            const fileId = tile.dataset.fileId;
-            if (!fileId) return;
-            window.location.href = `/api/files/${encodeURIComponent(fileId)}/download`;
-          });
-        });
-      }
-
-      async function addWorkspaceFiles(fileList) {
-        const files = Array.from(fileList || []);
-        for (const file of files) {
-          try {
-            const contentBase64 = await fileToBase64(file);
-            const payload = await requestJSON("/api/files/upload", {
-              method: "POST",
-              body: JSON.stringify({
-                appId: app.id,
-                name: file.name,
-                size: Number.isFinite(file.size) ? file.size : null,
-                type: file.type || "",
-                contentBase64,
-              }),
-            });
-            app.workspaceFiles.push(payload.file);
-          } catch {
-            showToast(`Could not upload ${file.name}`, "error");
-          }
-        }
-        app.updatedAt = nowIso();
-        persist();
-        renderWorkspaceFiles();
-      }
-
-      renderWorkspaceFiles();
-      drop.setAttribute("role", "button");
-      drop.setAttribute("tabindex", "0");
-      drop.setAttribute("aria-label", "Upload workspace files");
-      const openWorkspacePicker = () => fileInput.click();
-      drop.addEventListener("click", (e) => {
-        if (e.target.closest(".file-tile")) return;
-        openWorkspacePicker();
-      });
-      drop.addEventListener("touchend", (e) => {
-        if (e.target.closest(".file-tile")) return;
-        e.preventDefault();
-        openWorkspacePicker();
-      }, { passive: false });
-      drop.addEventListener("keydown", (e) => {
-        if (e.key !== "Enter" && e.key !== " ") return;
-        e.preventDefault();
-        openWorkspacePicker();
-      });
-      fileInput.addEventListener("change", async (e) => {
-        if (e.target.files) await addWorkspaceFiles(e.target.files);
-        fileInput.value = "";
-      });
-
-      ["dragenter", "dragover"].forEach((evt) => {
-        drop.addEventListener(evt, (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          drop.classList.add("highlight");
-        });
-      });
-
-      ["dragleave", "drop"].forEach((evt) => {
-        drop.addEventListener(evt, (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          drop.classList.remove("highlight");
-        });
-      });
-
-      drop.addEventListener("drop", async (e) => {
-        if (e.dataTransfer?.files) await addWorkspaceFiles(e.dataTransfer.files);
-      });
-
-      const descriptionInput = document.getElementById("descriptionInput");
-
-      if (state.pendingDescriptionFocusId === app.id) {
-        state.pendingDescriptionFocusId = null;
-        requestAnimationFrame(() => descriptionInput.focus());
-      }
-
-      descriptionInput.addEventListener("input", () => {
-        app.descriptionText = descriptionInput.value;
-        app.updatedAt = nowIso();
+      els.descriptionInput.addEventListener("input", () => {
+        const a = getDetailApp();
+        if (!a) return;
+        a.descriptionText = els.descriptionInput.value;
+        a.updatedAt = nowIso();
         persist();
       });
 
-      document.getElementById("deleteAppBtn").addEventListener("click", () => {
+      const confirmAndTrash = () => {
+        const a = getDetailApp();
+        if (!a) return;
         const confirmed = window.confirm("Move this application to trash?");
         if (!confirmed) return;
-        moveAppToTrash(app.id);
-      });
+        moveAppToTrash(a.id);
+      };
+
+      els.deleteAppBtn.addEventListener("click", confirmAndTrash);
 
       const openBestLink = () => {
-        const rawUrl = String(app.applicationUrl || app.jobUrl || "").trim();
+        const a = getDetailApp();
+        if (!a) return;
+        const rawUrl = String(a.applicationUrl || a.jobUrl || "").trim();
         if (!rawUrl) {
           showToast("No link available for this application.", "warn");
           return;
@@ -1285,21 +1180,188 @@ export function initJoblio() {
         }
       };
 
-      const mobileStatusBtn = document.getElementById("mobileDetailStatusBtn");
-      const mobileLinksBtn = document.getElementById("mobileDetailLinksBtn");
-      const mobileDeleteBtn = document.getElementById("mobileDetailDeleteBtn");
-      if (mobileStatusBtn) {
-        mobileStatusBtn.addEventListener("click", () => openStatusDialog(app.id, "update"));
-      }
-      if (mobileLinksBtn) {
-        mobileLinksBtn.addEventListener("click", openBestLink);
-      }
-      if (mobileDeleteBtn) {
-        mobileDeleteBtn.addEventListener("click", () => {
-          const confirmed = window.confirm("Move this application to trash?");
-          if (!confirmed) return;
-          moveAppToTrash(app.id);
+      els.drop.setAttribute("role", "button");
+      els.drop.setAttribute("tabindex", "0");
+      els.drop.setAttribute("aria-label", "Upload workspace files");
+      const openWorkspacePicker = () => els.fileInput.click();
+      els.drop.addEventListener("click", (e) => {
+        if (e.target.closest(".file-tile")) return;
+        openWorkspacePicker();
+      });
+      els.drop.addEventListener("touchend", (e) => {
+        if (e.target.closest(".file-tile")) return;
+        e.preventDefault();
+        openWorkspacePicker();
+      }, { passive: false });
+      els.drop.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        openWorkspacePicker();
+      });
+      els.fileInput.addEventListener("change", async (e) => {
+        const a = getDetailApp();
+        if (!a) return;
+        if (e.target.files) await addWorkspaceFiles(a, els, e.target.files);
+        els.fileInput.value = "";
+      });
+
+      ["dragenter", "dragover"].forEach((evt) => {
+        els.drop.addEventListener(evt, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          els.drop.classList.add("highlight");
         });
+      });
+
+      ["dragleave", "drop"].forEach((evt) => {
+        els.drop.addEventListener(evt, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          els.drop.classList.remove("highlight");
+        });
+      });
+
+      els.drop.addEventListener("drop", async (e) => {
+        const a = getDetailApp();
+        if (!a) return;
+        if (e.dataTransfer?.files) await addWorkspaceFiles(a, els, e.dataTransfer.files);
+      });
+
+      if (els.mobileStatusBtn) {
+        els.mobileStatusBtn.addEventListener("click", () => { const a = getDetailApp(); if (a) openStatusDialog(a.id, "update"); });
+      }
+      if (els.mobileLinksBtn) {
+        els.mobileLinksBtn.addEventListener("click", openBestLink);
+      }
+      if (els.mobileDeleteBtn) {
+        els.mobileDeleteBtn.addEventListener("click", confirmAndTrash);
+      }
+
+      return els;
+    }
+
+    function renderWorkspaceFiles(app, els) {
+      if (!app.workspaceFiles.length) {
+        els.drop.classList.remove("has-files");
+        els.filesEl.innerHTML = "";
+        return;
+      }
+      els.drop.classList.add("has-files");
+      els.filesEl.innerHTML = app.workspaceFiles
+        .map((file, index) => `
+          <article class="file-tile" title="${escapeHtml(file.name)}" data-file-id="${escapeHtml(file.id || "")}">
+            <div class="file-tile-head">
+              <span class="file-type">${escapeHtml(getFileBadge(file))}</span>
+              <button class="file-remove-btn" type="button" data-file-index="${index}" aria-label="Remove ${escapeHtml(file.name)}">×</button>
+            </div>
+            <div class="file-name">${escapeHtml(file.name)}</div>
+            <div class="file-meta">${escapeHtml(formatFileSize(file.size))}</div>
+          </article>
+        `)
+        .join("");
+
+      els.filesEl.querySelectorAll(".file-remove-btn").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const a = getDetailApp();
+          if (!a) return;
+          const idx = Number(btn.dataset.fileIndex);
+          if (!Number.isInteger(idx) || idx < 0 || idx >= a.workspaceFiles.length) return;
+          const fileName = a.workspaceFiles[idx]?.name || "this file";
+          const confirmed = window.confirm(`Remove "${fileName}" from workspace files?`);
+          if (!confirmed) return;
+          const fileId = a.workspaceFiles[idx]?.id;
+          if (fileId) {
+            try {
+              const result = await requestJSON(`/api/files/${encodeURIComponent(fileId)}`, { method: "DELETE" });
+              applyServerState(result.state || {});
+            } catch {
+              showToast(`Could not remove ${fileName}`, "error");
+              return;
+            }
+          }
+          render();
+          renderTrashDialog();
+        });
+      });
+
+      els.filesEl.querySelectorAll(".file-tile").forEach((tile) => {
+        tile.addEventListener("click", (e) => {
+          if (e.target.closest(".file-remove-btn")) return;
+          const fileId = tile.dataset.fileId;
+          if (!fileId) return;
+          window.location.href = `/api/files/${encodeURIComponent(fileId)}/download`;
+        });
+      });
+    }
+
+    async function addWorkspaceFiles(app, els, fileList) {
+      const files = Array.from(fileList || []);
+      for (const file of files) {
+        try {
+          const contentBase64 = await fileToBase64(file);
+          const payload = await requestJSON("/api/files/upload", {
+            method: "POST",
+            body: JSON.stringify({
+              appId: app.id,
+              name: file.name,
+              size: Number.isFinite(file.size) ? file.size : null,
+              type: file.type || "",
+              contentBase64,
+            }),
+          });
+          app.workspaceFiles.push(payload.file);
+        } catch {
+          showToast(`Could not upload ${file.name}`, "error");
+        }
+      }
+      app.updatedAt = nowIso();
+      persist();
+      renderWorkspaceFiles(app, els);
+    }
+
+    function updateDetail(app, els) {
+      updateIfNotFocused(els.fTitle, app.title);
+      updateIfNotFocused(els.fCompany, app.company);
+      updateIfNotFocused(els.fLocation, app.location || "");
+      updateIfNotFocused(els.fJobUrl, app.jobUrl || "");
+      updateIfNotFocused(els.fAppUrl, app.applicationUrl || "");
+      updateIfNotFocused(els.noteInput, app.note || "");
+      updateIfNotFocused(els.descriptionInput, app.descriptionText || "");
+
+      updateIfNotFocused(els.fMode, app.workMode);
+
+      els.noteInput.placeholder = `Use this space to jot down quick thoughts for ${escapeHtml(app.title)} at ${escapeHtml(app.company)}`;
+
+      els.coreStatusPill.className = `pill ${statusClass(app.status)}`;
+      els.coreStatusPill.textContent = `${getStatusLabel(app.status)} • ${fmtDate(app.statusUpdatedAt)}`;
+      els.openStatusBtn.className = `status-trigger ${statusClass(app.status)}`;
+      els.openStatusBtn.textContent = app.status ? `Update status: ${getStatusLabel(app.status)}` : "Set status";
+
+      renderWorkspaceFiles(app, els);
+    }
+
+    function renderDetail() {
+      const app = findApp(state.activeId);
+      if (!app) {
+        detailEl.innerHTML = `<div class=\"detail-empty\">No application selected. Click + New to start tracking.</div>`;
+        detailEls = null;
+        return;
+      }
+      ensureAppWorkspace(app);
+
+      if (detailEls && detailEls.appId === app.id) {
+        updateDetail(app, detailEls);
+      } else {
+        detailEls = buildDetailDom(app);
+        detailEls.appId = app.id;
+        renderWorkspaceFiles(app, detailEls);
+      }
+
+      if (state.pendingDescriptionFocusId === app.id) {
+        state.pendingDescriptionFocusId = null;
+        requestAnimationFrame(() => detailEls.descriptionInput.focus());
       }
     }
 
