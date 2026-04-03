@@ -21,12 +21,16 @@ const keyPath = path.join(outDir, 'localhost-key.pem');
   }
 
   const cmd = [
-    'req', '-x509', '-nodes', '-newkey', 'rsa:2048',
+    'req', '-x509', '-nodes', '-sha256',
+    '-newkey', 'rsa:3072',
     '-keyout', keyPath,
     '-out', certPath,
     '-days', '365',
     '-subj', '/CN=localhost',
     '-addext', 'subjectAltName=DNS:localhost,IP:127.0.0.1',
+    '-addext', 'basicConstraints=CA:FALSE',
+    '-addext', 'keyUsage=digitalSignature,keyEncipherment',
+    '-addext', 'extendedKeyUsage=serverAuth',
   ];
 
   const run = spawnSync('openssl', cmd, { cwd: root, stdio: 'pipe', encoding: 'utf8' });
