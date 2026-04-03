@@ -82,7 +82,8 @@ export function createSearchFilters(deps) {
 
   function appendSearchToken(tokenText) {
     const current = searchInput.value.trim();
-    searchInput.value = current ? `${current} ${tokenText}` : tokenText;
+    const withoutTrailing = current.replace(/\b(company|title|location|status|mode|notes|date):(?:"[^"]*)?$/i, '').trim();
+    searchInput.value = withoutTrailing ? `${withoutTrailing} ${tokenText}` : tokenText;
     searchInput.focus();
     state.search = searchInput.value;
     render();
@@ -98,38 +99,59 @@ export function createSearchFilters(deps) {
     searchWrap.classList.remove('open');
   }
 
+  function truncate(str, max) {
+    return str.length > max ? str.slice(0, max) + '\u2026' : str;
+  }
+
+  function dynamicSuggestionsForPrefix(prefix) {
+    const MAX_LABEL = 25;
+    const field = prefix.replace(/:$/, '');
+    if (field === 'company') {
+      return uniqueTopValues(state.apps.map((a) => a.company)).map((v) => ({
+        token: `company:"${v}"`, label: truncate(v, MAX_LABEL),
+      }));
+    }
+    if (field === 'title') {
+      return uniqueTopValues(state.apps.map((a) => a.title)).map((v) => ({
+        token: `title:"${v}"`, label: truncate(v, MAX_LABEL),
+      }));
+    }
+    if (field === 'location') {
+      return uniqueTopValues(state.apps.map((a) => a.location)).map((v) => ({
+        token: `location:"${v}"`, label: truncate(v, MAX_LABEL),
+      }));
+    }
+    if (field === 'status') {
+      return STATUS.map((s) => ({ token: `status:${s.id}`, label: s.label }));
+    }
+    if (field === 'mode') {
+      return MODES.map((m) => ({ token: `mode:${m.toLowerCase()}`, label: m }));
+    }
+    if (field === 'notes') {
+      return [];
+    }
+    if (field === 'date') {
+      return uniqueTopValues(
+        state.apps.flatMap((a) => [a.createdAt, a.updatedAt, a.statusUpdatedAt, a.appliedAt].map((d) => normalizeIsoDatePrefix(d))).filter(Boolean),
+      ).map((v) => ({ token: `date:${v}`, label: v }));
+    }
+    return [];
+  }
+
   function renderSearchPopover() {
     if (!searchPopover || !searchTokenPresets || !searchParsed) return;
     const q = String(state.search || '').trim();
-    const parsed = parseSearchQuery(q);
-    const quickPresets = [
-      'company:',
-      'title:',
-      'location:',
-      'status:applied',
-      'status:in_progress',
-      'mode:remote',
-      'date:',
-      'created:',
-      'applied:',
-    ];
-    const dynamicCompany = uniqueTopValues(state.apps.map((a) => a.company)).map((v) => `company:\"${v}\"`);
-    const dynamicTitle = uniqueTopValues(state.apps.map((a) => a.title), 3).map((v) => `title:\"${v}\"`);
-    const dynamicLocation = uniqueTopValues(state.apps.map((a) => a.location), 3).map((v) => `location:\"${v}\"`);
-    const presetItems = [...quickPresets, ...dynamicCompany.slice(0, 3), ...dynamicTitle, ...dynamicLocation].slice(0, 12);
+    const fieldPrefixes = ['company:', 'title:', 'location:', 'status:', 'mode:', 'notes:', 'date:'];
 
-    searchTokenPresets.innerHTML = presetItems
-      .map((p) => `<button type="button" class="search-token-btn" data-token="${escapeHtml(p)}">${escapeHtml(p)}</button>`)
-      .join('');
+    const trailingPrefix = q.match(/(?:^|\s)(company|title|location|status|mode|notes|date):(?:"[^"]*)?$/i);
+    const suggestions = trailingPrefix ? dynamicSuggestionsForPrefix(trailingPrefix[1].toLowerCase() + ':') : [];
 
-    const chips = [];
-    Object.entries(parsed.tokens).forEach(([field, values]) => {
-      values.forEach((value) => chips.push(`<span class="search-token-chip">${escapeHtml(field)}:${escapeHtml(value)}</span>`));
-    });
-    parsed.terms.forEach((term) => chips.push(`<span class="search-token-chip">text:${escapeHtml(term)}</span>`));
-    const hasTokenChips = Object.values(parsed.tokens).some((arr) => arr.length > 0);
-    searchWrap.classList.toggle('has-tokens', hasTokenChips);
-    searchParsed.innerHTML = chips.length ? chips.join('') : '';
+    searchTokenPresets.innerHTML = suggestions.length
+      ? suggestions.map((s) => `<button type="button" class="search-token-btn" data-token="${escapeHtml(s.token)}">${escapeHtml(s.label)}</button>`).join('')
+      : fieldPrefixes.map((p) => `<button type="button" class="search-token-btn" data-token="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join('');
+
+    searchWrap.classList.remove('has-tokens');
+    searchParsed.innerHTML = '';
 
   }
 
@@ -139,28 +161,28 @@ export function createSearchFilters(deps) {
     const base = state.apps.filter((app) => {
       if (state.statusFilter !== 'all' && app.status !== state.statusFilter) return false;
       if (state.modeFilter !== 'all' && app.workMode !== state.modeFilter) return false;
-      if (tokens.company.some((v) => !String(app.company || '').toLowerCase().includes(v))) return false;
-      if (tokens.title.some((v) => !String(app.title || '').toLowerCase().includes(v))) return false;
-      if (tokens.location.some((v) => !String(app.location || '').toLowerCase().includes(v))) return false;
-      if (tokens.notes.some((v) => !String(app.note || '').toLowerCase().includes(v))) return false;
-      if (tokens.status.some((v) => {
+      if (tokens.company.length && !tokens.company.some((v) => String(app.company || '').toLowerCase().includes(v))) return false;
+      if (tokens.title.length && !tokens.title.some((v) => String(app.title || '').toLowerCase().includes(v))) return false;
+      if (tokens.location.length && !tokens.location.some((v) => String(app.location || '').toLowerCase().includes(v))) return false;
+      if (tokens.notes.length && !tokens.notes.some((v) => String(app.note || '').toLowerCase().includes(v))) return false;
+      if (tokens.status.length && !tokens.status.some((v) => {
         const statusId = String(app.status || '').toLowerCase();
         const statusLabel = String(getStatusLabel(app.status) || '').toLowerCase();
-        return !(statusId.includes(v) || statusLabel.includes(v));
+        return statusId.includes(v) || statusLabel.includes(v);
       })) return false;
-      if (tokens.mode.some((v) => !String(app.workMode || '').toLowerCase().includes(v))) return false;
+      if (tokens.mode.length && !tokens.mode.some((v) => String(app.workMode || '').toLowerCase().includes(v))) return false;
       const createdDate = normalizeIsoDatePrefix(app.createdAt);
       const updatedDate = normalizeIsoDatePrefix(app.updatedAt);
       const statusUpdatedDate = normalizeIsoDatePrefix(app.statusUpdatedAt);
       const appliedDate = normalizeIsoDatePrefix(app.appliedAt);
       const followUpDate = normalizeIsoDatePrefix(app.nextFollowUpAt);
       const anyDateFields = [createdDate, updatedDate, statusUpdatedDate, appliedDate, followUpDate].filter(Boolean);
-      if (tokens.created.some((v) => !datePrefixMatches(createdDate, v))) return false;
-      if (tokens.updated.some((v) => !datePrefixMatches(updatedDate, v))) return false;
-      if (tokens.status_updated.some((v) => !datePrefixMatches(statusUpdatedDate, v))) return false;
-      if (tokens.applied.some((v) => !datePrefixMatches(appliedDate, v))) return false;
-      if (tokens.followup.some((v) => !datePrefixMatches(followUpDate, v))) return false;
-      if (tokens.date.some((v) => !anyDateFields.some((d) => datePrefixMatches(d, v)))) return false;
+      if (tokens.created.length && !tokens.created.some((v) => datePrefixMatches(createdDate, v))) return false;
+      if (tokens.updated.length && !tokens.updated.some((v) => datePrefixMatches(updatedDate, v))) return false;
+      if (tokens.status_updated.length && !tokens.status_updated.some((v) => datePrefixMatches(statusUpdatedDate, v))) return false;
+      if (tokens.applied.length && !tokens.applied.some((v) => datePrefixMatches(appliedDate, v))) return false;
+      if (tokens.followup.length && !tokens.followup.some((v) => datePrefixMatches(followUpDate, v))) return false;
+      if (tokens.date.length && !tokens.date.some((v) => anyDateFields.some((d) => datePrefixMatches(d, v)))) return false;
       if (!terms.length) return true;
       const hay = `${app.company} ${app.title} ${app.location} ${app.note}`.toLowerCase();
       return terms.every((t) => hay.includes(t));
