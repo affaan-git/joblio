@@ -55,6 +55,27 @@ Issues during setup? Jump to [Troubleshooting](#troubleshooting).
 - [`Node.js 20+`](https://nodejs.org/) ([download](https://nodejs.org/en/download))
 - [`OpenSSL`](https://www.openssl.org/) (required only when generating local certs with `npm run tls:gen`; not needed if you already have cert/key files)
 
+#### Windows: OpenSSL / `tls:gen`
+
+Windows does not include OpenSSL, so `npm run tls:gen` will fail.
+
+Certs can be generated manually using WSL from the project root:
+
+```sh
+mkdir -p .joblio-data/tls && openssl req -x509 -nodes -sha256 \
+  -newkey rsa:3072 \
+  -keyout .joblio-data/tls/localhost-key.pem \
+  -out .joblio-data/tls/localhost-cert.pem \
+  -days 365 \
+  -subj '/CN=localhost' \
+  -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1' \
+  -addext 'basicConstraints=CA:FALSE' \
+  -addext 'keyUsage=digitalSignature,keyEncipherment' \
+  -addext 'extendedKeyUsage=serverAuth'
+```
+
+Then continue with `npm run setup`.
+
 ### Security First
 
 - Supported deployment: local machine access by default (loopback/localhost).
@@ -106,6 +127,9 @@ npm run setup
 npm start
 ```
 
+> Windows: `tls:gen` requires OpenSSL.
+> See [Windows: OpenSSL / `tls:gen`](#windows-openssl--tlsgen) under Prerequisites.
+
 Then open the HTTPS URL printed in your terminal and sign in with your configured Basic Auth credentials.
 Default mode is local-machine only. Optional LAN mode can be enabled during setup with explicit allowlist enforcement.
 
@@ -130,7 +154,7 @@ Build project
 npm run build
 ```
 
-Create TLS cert/key paths
+Create TLS cert/key paths ([Windows: see Prerequisites](#windows-openssl--tlsgen))
 
 ```sh
 npm run tls:gen
@@ -187,6 +211,9 @@ npm run tls:gen
 npm run setup
 npm start
 ```
+
+> Windows: `tls:gen` requires OpenSSL.
+> See [Windows: OpenSSL / `tls:gen`](#windows-openssl--tlsgen) under Prerequisites.
 
 See [Quick Start](#quick-start) for clone + first run in one block.
 
